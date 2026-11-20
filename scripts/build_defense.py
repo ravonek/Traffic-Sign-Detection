@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Build the five-slide defense deck from real notebook artifacts.
+"""Build a polished five-slide defense deck from Traffic Sign artifacts.
 
-The script never invents missing metrics. Without an artifact bundle it creates
-an explicitly marked pre-run deck; with the completed Colab ZIP it fills the
-tables and uses exported prediction/failure images.
+The deck has two truthful modes:
+
+* without artifacts: an explicitly marked pre-run presentation with no metrics;
+* with the completed Colab ZIP/directory: measured validation/test values and
+  exported evidence are inserted automatically.
+
+No result is estimated or fabricated.
 """
 
 from __future__ import annotations
@@ -16,25 +20,50 @@ import zipfile
 from pathlib import Path
 from typing import Any, Iterable
 
+from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
+from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE, MSO_CONNECTOR
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "CSCI1409_Bonus_Traffic_Signs_Defense_3min.pptx"
+COLAB_URL = (
+    "https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/"
+    "blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb"
+)
 
-NAVY = RGBColor(12, 25, 48)
-BLUE = RGBColor(37, 99, 235)
-CYAN = RGBColor(14, 203, 180)
-ORANGE = RGBColor(249, 160, 67)
-INK = RGBColor(24, 35, 54)
-MUTED = RGBColor(93, 107, 128)
-PALE = RGBColor(238, 244, 251)
-WHITE = RGBColor(255, 255, 255)
-RED = RGBColor(202, 54, 75)
+
+def C(value: str) -> RGBColor:
+    value = value.lstrip("#")
+    return RGBColor(int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
+
+
+NAVY = C("07111F")
+NAVY_2 = C("0D1B2E")
+SLATE = C("17283E")
+PANEL = C("1D314A")
+INK = C("132238")
+MUTED = C("60708A")
+WHITE = C("FFFFFF")
+PAPER = C("F6F8FC")
+LINE = C("DCE4EF")
+CYAN = C("18D5C3")
+BLUE = C("3977F6")
+BLUE_2 = C("2154C7")
+ORANGE = C("FFB04A")
+RED = C("F04F5F")
+GREEN = C("28C891")
+YELLOW = C("FFD166")
+SOFT_CYAN = C("DDF8F5")
+SOFT_BLUE = C("E8F0FF")
+SOFT_ORANGE = C("FFF0DD")
+SOFT_RED = C("FFE8EB")
+
+FONT_HEAD = "Aptos Display"
+FONT_BODY = "Aptos"
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -58,7 +87,7 @@ def safe_extract(zip_path: Path, destination: Path) -> None:
         root = destination.resolve()
         for item in archive.infolist():
             target = (destination / item.filename).resolve()
-            if root not in target.parents and target != root:
+            if target != root and root not in target.parents:
                 raise ValueError(f"Unsafe ZIP entry: {item.filename}")
         archive.extractall(destination)
 
@@ -80,23 +109,54 @@ def locate_artifacts(path: Path | None, temporary: Path) -> Path | None:
 def evidence_root(artifacts: Path | None) -> Path | None:
     if artifacts is None:
         return None
-    direct = artifacts / "evidence"
-    if direct.is_dir():
-        return direct
+    if (artifacts / "evidence").is_dir():
+        return artifacts / "evidence"
     found = list(artifacts.rglob("test_metrics.json"))
     return found[0].parent if found else None
 
 
-def add_rect(slide, x, y, w, h, fill, radius=True, line=None):
-    kind = MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE if radius else MSO_AUTO_SHAPE_TYPE.RECTANGLE
-    shape = slide.shapes.add_shape(kind, x, y, w, h)
+def fill(shape, color: RGBColor) -> None:
     shape.fill.solid()
-    shape.fill.fore_color.rgb = fill
-    shape.line.color.rgb = line or fill
+    shape.fill.fore_color.rgb = color
+
+
+def rect(slide, x, y, w, h, color, *, radius=True, line=None, line_width=1):
+    x, y, w, h = map(int, (x, y, w, h))
+    kind = (
+        MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE
+        if radius
+        else MSO_AUTO_SHAPE_TYPE.RECTANGLE
+    )
+    shape = slide.shapes.add_shape(kind, x, y, w, h)
+    fill(shape, color)
+    shape.line.color.rgb = line if line is not None else color
+    shape.line.width = Pt(line_width)
     return shape
 
 
-def add_text(
+def shadow_card(slide, x, y, w, h, color=WHITE, *, radius=True, line=LINE):
+    rect(slide, x + Inches(0.055), y + Inches(0.07), w, h, C("D5DDE9"), radius=radius)
+    return rect(slide, x, y, w, h, color, radius=radius, line=line)
+
+
+def circle(slide, x, y, d, color, *, line=None, line_width=1):
+    x, y, d = map(int, (x, y, d))
+    shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.OVAL, x, y, d, d)
+    fill(shape, color)
+    shape.line.color.rgb = line if line is not None else color
+    shape.line.width = Pt(line_width)
+    return shape
+
+
+def line(slide, x1, y1, x2, y2, color, width=2):
+    x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
+    shape = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x1, y1, x2, y2)
+    shape.line.color.rgb = color
+    shape.line.width = Pt(width)
+    return shape
+
+
+def textbox(
     slide,
     text: str,
     x,
@@ -108,18 +168,22 @@ def add_text(
     color=INK,
     bold=False,
     align=PP_ALIGN.LEFT,
-    font="Aptos",
-    margin=0.04,
     valign=MSO_ANCHOR.TOP,
+    font=FONT_BODY,
+    margin=0.02,
+    spacing=1.0,
 ):
+    x, y, w, h = map(int, (x, y, w, h))
     box = slide.shapes.add_textbox(x, y, w, h)
     frame = box.text_frame
     frame.clear()
+    frame.word_wrap = True
     frame.margin_left = frame.margin_right = Inches(margin)
     frame.margin_top = frame.margin_bottom = Inches(margin)
     frame.vertical_anchor = valign
     paragraph = frame.paragraphs[0]
     paragraph.alignment = align
+    paragraph.line_spacing = spacing
     run = paragraph.add_run()
     run.text = text
     run.font.name = font
@@ -129,99 +193,251 @@ def add_text(
     return box
 
 
-def add_rich_lines(slide, lines: Iterable[tuple[str, str]], x, y, w, h, size=18):
+def rich_text(slide, parts: Iterable[tuple[str, dict]], x, y, w, h, *, align=PP_ALIGN.LEFT):
+    x, y, w, h = map(int, (x, y, w, h))
     box = slide.shapes.add_textbox(x, y, w, h)
     frame = box.text_frame
     frame.clear()
     frame.word_wrap = True
-    frame.margin_left = frame.margin_right = Inches(0.08)
-    for index, (lead, body) in enumerate(lines):
-        p = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
-        p.space_after = Pt(10)
-        p.font.name = "Aptos"
-        p.font.size = Pt(size)
+    frame.margin_left = frame.margin_right = 0
+    frame.margin_top = frame.margin_bottom = 0
+    p = frame.paragraphs[0]
+    p.alignment = align
+    for value, style in parts:
         r = p.add_run()
-        r.text = lead
-        r.font.bold = True
-        r.font.color.rgb = BLUE
-        r2 = p.add_run()
-        r2.text = body
-        r2.font.color.rgb = INK
+        r.text = value
+        r.font.name = style.get("font", FONT_BODY)
+        r.font.size = Pt(style.get("size", 20))
+        r.font.bold = style.get("bold", False)
+        r.font.color.rgb = style.get("color", INK)
     return box
 
 
-def add_title(slide, number: str, title: str, subtitle: str | None = None):
-    add_text(slide, number, Inches(0.55), Inches(0.30), Inches(0.52), Inches(0.40),
-             size=14, color=CYAN, bold=True, valign=MSO_ANCHOR.MIDDLE)
-    add_text(slide, title, Inches(1.05), Inches(0.22), Inches(11.65), Inches(0.55),
-             size=27, color=NAVY, bold=True)
+def pill(slide, text, x, y, w, color, *, text_color=WHITE, border=None):
+    rect(slide, x, y, w, Inches(0.34), color, radius=True, line=border or color)
+    textbox(
+        slide,
+        text.upper(),
+        x + Inches(0.08),
+        y + Inches(0.075),
+        w - Inches(0.16),
+        Inches(0.17),
+        size=9,
+        color=text_color,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+
+def set_background(slide, color):
+    rect(slide, 0, 0, Inches(13.333), Inches(7.5), color, radius=False)
+
+
+def add_header(slide, section: str, title: str, subtitle: str | None = None, *, dark=False):
+    fg = WHITE if dark else NAVY
+    muted = C("A9B7CA") if dark else MUTED
+    pill(
+        slide,
+        section,
+        Inches(0.58),
+        Inches(0.37),
+        Inches(0.77),
+        CYAN if dark else NAVY,
+        text_color=NAVY if dark else WHITE,
+    )
+    textbox(
+        slide,
+        title,
+        Inches(1.52),
+        Inches(0.30),
+        Inches(11.2),
+        Inches(0.46),
+        size=25,
+        color=fg,
+        bold=True,
+        font=FONT_HEAD,
+    )
     if subtitle:
-        add_text(slide, subtitle, Inches(1.08), Inches(0.77), Inches(11.2), Inches(0.35),
-                 size=12, color=MUTED)
+        textbox(
+            slide,
+            subtitle,
+            Inches(1.54),
+            Inches(0.79),
+            Inches(10.8),
+            Inches(0.30),
+            size=11,
+            color=muted,
+        )
 
 
-def add_footer(slide, slide_number: int):
-    add_text(slide, "CSCI1409 · Individual Bonus Project", Inches(0.62), Inches(7.14),
-             Inches(4.0), Inches(0.20), size=9, color=MUTED)
-    add_text(slide, str(slide_number), Inches(12.15), Inches(7.10), Inches(0.55),
-             Inches(0.24), size=10, color=MUTED, align=PP_ALIGN.RIGHT)
+def add_footer(slide, number: int, *, dark=False):
+    color = C("8FA1B9") if dark else MUTED
+    line(slide, Inches(0.62), Inches(7.04), Inches(12.70), Inches(7.04), C("29405E") if dark else LINE, 1)
+    textbox(
+        slide,
+        "CSCI1409 DEEP LEARNING  ·  INDIVIDUAL BONUS PROJECT",
+        Inches(0.64),
+        Inches(7.13),
+        Inches(5.2),
+        Inches(0.18),
+        size=8,
+        color=color,
+        bold=True,
+    )
+    textbox(
+        slide,
+        f"0{number}",
+        Inches(12.16),
+        Inches(7.10),
+        Inches(0.52),
+        Inches(0.20),
+        size=9,
+        color=color,
+        bold=True,
+        align=PP_ALIGN.RIGHT,
+    )
 
 
 def set_notes(slide, notes: str) -> None:
     try:
-        frame = slide.notes_slide.notes_text_frame
-        frame.text = notes
+        slide.notes_slide.notes_text_frame.text = notes
     except (AttributeError, NotImplementedError):
         pass
+
+
+def add_speed_sign(slide, x, y, d, number="50"):
+    circle(slide, x, y, d, WHITE, line=RED, line_width=5)
+    textbox(
+        slide,
+        number,
+        x,
+        y + d * 0.24,
+        d,
+        d * 0.40,
+        size=max(12, int(d / 50000)),
+        color=NAVY,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        valign=MSO_ANCHOR.MIDDLE,
+        font=FONT_HEAD,
+    )
+
+
+def add_stop_sign(slide, x, y, d):
+    shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.OCTAGON, x, y, d, d)
+    fill(shape, RED)
+    shape.line.color.rgb = WHITE
+    shape.line.width = Pt(3)
+    textbox(
+        slide,
+        "STOP",
+        x,
+        y + d * 0.34,
+        d,
+        d * 0.26,
+        size=max(10, int(d / 60000)),
+        color=WHITE,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+        valign=MSO_ANCHOR.MIDDLE,
+        font=FONT_HEAD,
+    )
+
+
+def add_traffic_light(slide, x, y, w, h):
+    rect(slide, x, y, w, h, NAVY_2, radius=True, line=C("39516C"), line_width=1.5)
+    d = min(w * 0.55, h * 0.22)
+    cx = x + (w - d) / 2
+    gap = (h - 3 * d) / 4
+    for index, color in enumerate([RED, YELLOW, GREEN]):
+        circle(slide, cx, y + gap + index * (d + gap), d, color)
+
+
+def add_crosswalk_sign(slide, x, y, d):
+    rect(slide, x, y, d, d, BLUE, radius=False, line=WHITE, line_width=2)
+    tri = slide.shapes.add_shape(
+        MSO_AUTO_SHAPE_TYPE.ISOSCELES_TRIANGLE,
+        int(x + d * 0.10),
+        int(y + d * 0.08),
+        int(d * 0.80),
+        int(d * 0.74),
+    )
+    fill(tri, WHITE)
+    tri.line.color.rgb = WHITE
+    # Person
+    circle(slide, x + d * 0.44, y + d * 0.25, d * 0.10, NAVY)
+    line(slide, x + d * 0.49, y + d * 0.35, x + d * 0.47, y + d * 0.55, NAVY, 3)
+    line(slide, x + d * 0.47, y + d * 0.41, x + d * 0.34, y + d * 0.49, NAVY, 3)
+    line(slide, x + d * 0.47, y + d * 0.42, x + d * 0.61, y + d * 0.48, NAVY, 3)
+    line(slide, x + d * 0.47, y + d * 0.55, x + d * 0.36, y + d * 0.70, NAVY, 3)
+    line(slide, x + d * 0.47, y + d * 0.55, x + d * 0.59, y + d * 0.69, NAVY, 3)
+    for i in range(4):
+        rect(
+            slide,
+            x + d * (0.19 + i * 0.16),
+            y + d * (0.77 - i * 0.01),
+            d * 0.12,
+            d * 0.055,
+            NAVY,
+            radius=False,
+        )
+
+
+def add_sun(slide, x, y, d):
+    circle(slide, x, y, d, YELLOW)
+    cx, cy = x + d / 2, y + d / 2
+    for dx, dy in [(0, -0.42), (0, 0.42), (-0.42, 0), (0.42, 0), (-0.30, -0.30), (0.30, 0.30), (-0.30, 0.30), (0.30, -0.30)]:
+        line(slide, cx + d * dx * 0.72, cy + d * dy * 0.72, cx + d * dx, cy + d * dy, YELLOW, 2)
+
+
+def add_moon(slide, x, y, d):
+    circle(slide, x, y, d, C("C4D5F2"))
+    circle(slide, x + d * 0.30, y - d * 0.03, d * 0.84, NAVY_2)
 
 
 def metric(value: Any) -> str:
     try:
         return f"{float(value):.3f}"
     except (TypeError, ValueError):
-        return "Pending"
+        return "—"
 
 
 def minutes(value: Any) -> str:
     try:
         return f"{float(value):.1f} min"
     except (TypeError, ValueError):
-        return "Pending"
-
-
-def add_metric_card(slide, label: str, value: str, x, y, color=BLUE):
-    add_rect(slide, x, y, Inches(2.05), Inches(1.02), PALE)
-    add_text(slide, label, x + Inches(0.16), y + Inches(0.13), Inches(1.72), Inches(0.24),
-             size=10, color=MUTED, bold=True)
-    add_text(slide, value, x + Inches(0.14), y + Inches(0.41), Inches(1.74), Inches(0.42),
-             size=24 if value != "Pending" else 18, color=color, bold=True)
-
-
-def add_table(slide, rows: list[list[str]], x, y, widths: list[float], row_height=0.46):
-    total_w = sum(widths)
-    for r, row in enumerate(rows):
-        x_pos = x
-        for c, value in enumerate(row):
-            fill = NAVY if r == 0 else (WHITE if r % 2 else PALE)
-            color = WHITE if r == 0 else INK
-            add_rect(slide, x_pos, y + Inches(row_height * r), Inches(widths[c]),
-                     Inches(row_height), fill, radius=False, line=PALE if r else NAVY)
-            add_text(slide, value, x_pos + Inches(0.05), y + Inches(row_height * r + 0.06),
-                     Inches(widths[c] - 0.10), Inches(row_height - 0.08),
-                     size=10 if r else 9, color=color, bold=(r == 0 or c == 0),
-                     valign=MSO_ANCHOR.MIDDLE)
-            x_pos += Inches(widths[c])
-    return Inches(total_w), Inches(row_height * len(rows))
+        return "—"
 
 
 def add_picture_contain(slide, path: Path, x, y, w, h):
-    from PIL import Image
-
     with Image.open(path) as image:
         iw, ih = image.size
     scale = min(w / iw, h / ih)
     pw, ph = int(iw * scale), int(ih * scale)
     return slide.shapes.add_picture(str(path), x + (w - pw) // 2, y + (h - ph) // 2, pw, ph)
+
+
+def add_metric_card(slide, label, value, x, y, w, *, accent=CYAN, dark=False, sub=None):
+    bg = PANEL if dark else WHITE
+    fg = WHITE if dark else NAVY
+    muted = C("A9B7CA") if dark else MUTED
+    if dark:
+        rect(slide, x, y, w, Inches(1.28), bg, radius=True, line=C("38506D"))
+    else:
+        shadow_card(slide, x, y, w, Inches(1.28))
+    rect(slide, x, y, Inches(0.075), Inches(1.28), accent, radius=False)
+    textbox(slide, label.upper(), x + Inches(0.22), y + Inches(0.19), w - Inches(0.35), Inches(0.22), size=9, color=muted, bold=True)
+    textbox(slide, value, x + Inches(0.20), y + Inches(0.47), w - Inches(0.34), Inches(0.42), size=25, color=fg, bold=True, font=FONT_HEAD)
+    if sub:
+        textbox(slide, sub, x + Inches(0.22), y + Inches(0.99), w - Inches(0.35), Inches(0.17), size=8, color=muted)
+
+
+def add_pipeline_step(slide, number, title, detail, x, y, w, *, accent):
+    shadow_card(slide, x, y, w, Inches(1.55), WHITE)
+    circle(slide, x + Inches(0.20), y + Inches(0.20), Inches(0.42), accent)
+    textbox(slide, str(number), x + Inches(0.20), y + Inches(0.30), Inches(0.42), Inches(0.16), size=10, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    textbox(slide, title, x + Inches(0.20), y + Inches(0.76), w - Inches(0.40), Inches(0.28), size=14, color=NAVY, bold=True, font=FONT_HEAD)
+    textbox(slide, detail, x + Inches(0.20), y + Inches(1.10), w - Inches(0.40), Inches(0.30), size=9, color=MUTED)
 
 
 def build_deck(artifacts: Path | None, output: Path) -> None:
@@ -238,177 +454,320 @@ def build_deck(artifacts: Path | None, output: Path) -> None:
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
-    # Slide 1
+    # ------------------------------------------------------------------ Slide 1
     slide = prs.slides.add_slide(blank)
-    add_rect(slide, 0, 0, prs.slide_width, prs.slide_height, NAVY, radius=False)
-    add_rect(slide, Inches(0.72), Inches(0.76), Inches(0.12), Inches(4.95), CYAN, radius=False)
-    add_text(slide, "TRAFFIC SIGN\nDETECTION", Inches(1.16), Inches(1.05), Inches(8.2), Inches(1.55),
-             size=36, color=WHITE, bold=True)
-    add_text(slide, "YOLO11n · controlled brightness experiment", Inches(1.18), Inches(2.67),
-             Inches(7.3), Inches(0.46), size=20, color=CYAN)
-    add_text(slide, "Does HSV brightness augmentation improve road-sign detection\nunder different lighting conditions?",
-             Inches(1.18), Inches(3.34), Inches(7.5), Inches(1.15), size=22, color=WHITE)
-    status_color = CYAN if measured else ORANGE
-    status_text = "MEASURED RESULTS" if measured else "PRE-RUN · RESULTS PENDING"
-    add_rect(slide, Inches(9.35), Inches(1.10), Inches(3.10), Inches(0.55), status_color)
-    add_text(slide, status_text, Inches(9.47), Inches(1.23), Inches(2.86), Inches(0.24),
-             size=11, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-    for idx, label in enumerate(["crosswalk", "speed limit", "stop", "traffic light"]):
-        add_rect(slide, Inches(9.42), Inches(2.15 + idx * 0.76), Inches(2.92), Inches(0.53),
-                 RGBColor(27, 44, 72))
-        add_text(slide, f"0{idx}  {label}", Inches(9.62), Inches(2.29 + idx * 0.76),
-                 Inches(2.45), Inches(0.23), size=13, color=WHITE, bold=True)
-    add_text(slide, "CSCI1409 Deep Learning · KBTU · Fall 2026", Inches(1.18), Inches(6.58),
-             Inches(7.6), Inches(0.30), size=12, color=RGBColor(165, 180, 203))
-    set_notes(slide, "Introduce the four-class object-detection task and the brightness research question.")
+    set_background(slide, NAVY)
+    rect(slide, Inches(0), Inches(0), Inches(0.13), Inches(7.5), CYAN, radius=False)
+    rect(slide, Inches(8.45), Inches(0), Inches(4.88), Inches(7.5), NAVY_2, radius=False)
+    pill(slide, "CSCI1409 · BONUS PROJECT", Inches(0.72), Inches(0.62), Inches(2.34), C("1F3853"), text_color=CYAN)
+    pill(
+        slide,
+        "MEASURED" if measured else "PRE-RUN · RESULTS PENDING",
+        Inches(3.20),
+        Inches(0.62),
+        Inches(2.35 if measured else 2.75),
+        GREEN if measured else ORANGE,
+        text_color=NAVY,
+    )
 
-    # Slide 2
+    rich_text(
+        slide,
+        [
+            ("DOES ", {"size": 39, "color": WHITE, "bold": True, "font": FONT_HEAD}),
+            ("BRIGHTNESS", {"size": 39, "color": CYAN, "bold": True, "font": FONT_HEAD}),
+            ("\nAUGMENTATION\nHELP YOLO11n?", {"size": 39, "color": WHITE, "bold": True, "font": FONT_HEAD}),
+        ],
+        Inches(0.72),
+        Inches(1.38),
+        Inches(7.25),
+        Inches(2.55),
+    )
+    textbox(
+        slide,
+        "A controlled object-detection experiment across four road-sign classes",
+        Inches(0.76),
+        Inches(4.18),
+        Inches(6.75),
+        Inches(0.62),
+        size=18,
+        color=C("B8C7D9"),
+    )
+    textbox(slide, "BASELINE", Inches(0.76), Inches(5.20), Inches(1.18), Inches(0.22), size=9, color=C("91A5BD"), bold=True)
+    textbox(slide, "hsv_v = 0.00", Inches(0.76), Inches(5.50), Inches(2.10), Inches(0.34), size=20, color=WHITE, bold=True, font=FONT_HEAD)
+    line(slide, Inches(3.00), Inches(5.18), Inches(3.00), Inches(5.98), C("34506F"), 1)
+    textbox(slide, "EXPERIMENT", Inches(3.28), Inches(5.20), Inches(1.40), Inches(0.22), size=9, color=CYAN, bold=True)
+    textbox(slide, "hsv_v = 0.35", Inches(3.28), Inches(5.50), Inches(2.10), Inches(0.34), size=20, color=CYAN, bold=True, font=FONT_HEAD)
+    textbox(slide, "Adilkhan Kaldybekov", Inches(0.76), Inches(6.56), Inches(3.20), Inches(0.28), size=12, color=C("8FA1B9"), bold=True)
+
+    # Sign constellation
+    rect(slide, Inches(8.86), Inches(0.66), Inches(3.94), Inches(5.95), C("12243A"), radius=True, line=C("28425E"), line_width=1.5)
+    textbox(slide, "4 CLASSES", Inches(9.24), Inches(0.99), Inches(3.16), Inches(0.24), size=10, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
+    add_crosswalk_sign(slide, Inches(9.18), Inches(1.48), Inches(1.22))
+    add_speed_sign(slide, Inches(11.05), Inches(1.44), Inches(1.30), "50")
+    add_stop_sign(slide, Inches(9.14), Inches(3.50), Inches(1.32))
+    add_traffic_light(slide, Inches(11.29), Inches(3.42), Inches(0.82), Inches(1.72))
+    textbox(slide, "crosswalk", Inches(8.96), Inches(2.83), Inches(1.64), Inches(0.22), size=10, color=C("A9B7CA"), align=PP_ALIGN.CENTER)
+    textbox(slide, "speed limit", Inches(10.90), Inches(2.83), Inches(1.62), Inches(0.22), size=10, color=C("A9B7CA"), align=PP_ALIGN.CENTER)
+    textbox(slide, "stop", Inches(9.03), Inches(5.12), Inches(1.50), Inches(0.22), size=10, color=C("A9B7CA"), align=PP_ALIGN.CENTER)
+    textbox(slide, "traffic light", Inches(10.83), Inches(5.32), Inches(1.74), Inches(0.22), size=10, color=C("A9B7CA"), align=PP_ALIGN.CENTER)
+    pill(slide, "YOLO11n · 512 px · 14 epochs", Inches(9.35), Inches(5.94), Inches(2.96), C("1F3853"), text_color=WHITE)
+    set_notes(
+        slide,
+        "Hello. This project studies four-class traffic-sign detection with YOLO11n. "
+        "The research question is whether one controlled change—brightness augmentation—"
+        "improves validation mAP at IoU 0.50.",
+    )
+
+    # ------------------------------------------------------------------ Slide 2
     slide = prs.slides.add_slide(blank)
-    add_title(slide, "01", "Dataset and leakage-aware preparation",
-              "PASCAL VOC source → audit → grouped split → YOLO labels")
-    class_names = ["crosswalk", "speedlimit", "stop", "trafficlight"]
-    for i, name in enumerate(class_names):
-        x = Inches(0.68 + i * 2.18)
-        add_rect(slide, x, Inches(1.30), Inches(1.95), Inches(0.64), [CYAN, BLUE, ORANGE, RED][i])
-        add_text(slide, f"{i}  {name}", x + Inches(0.10), Inches(1.49), Inches(1.73), Inches(0.22),
-                 size=12, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_rich_lines(slide, [
-        ("Source · ", "877 documented street images with XML bounding boxes"),
-        ("Audit · ", "missing labels, unknown classes, invalid boxes and image sizes"),
-        ("Leakage control · ", "SHA-256 + perceptual hash groups stay in one split"),
-        ("Locked test · ", "provider hold-out is used only after model selection"),
-    ], Inches(0.68), Inches(2.30), Inches(7.55), Inches(3.6), size=17)
-    if counts:
-        rows = [["Split", "Images", "Objects"]]
-        rows.extend([[r.get("split", ""), r.get("images", ""), r.get("objects", "")] for r in counts])
-        add_table(slide, rows, Inches(8.55), Inches(2.30), [1.35, 1.25, 1.25], row_height=0.55)
-        add_text(slide, "Observed after execution", Inches(8.60), Inches(4.78), Inches(3.5), Inches(0.28),
-                 size=11, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
-    else:
-        add_rect(slide, Inches(8.55), Inches(2.30), Inches(3.85), Inches(2.60), PALE)
-        add_text(slide, "SPLIT COUNTS", Inches(8.88), Inches(2.70), Inches(3.18), Inches(0.30),
-                 size=14, color=MUTED, bold=True, align=PP_ALIGN.CENTER)
-        add_text(slide, "Pending Colab run", Inches(8.88), Inches(3.30), Inches(3.18), Inches(0.45),
-                 size=22, color=ORANGE, bold=True, align=PP_ALIGN.CENTER)
-        add_text(slide, "dataset_counts.csv will fill this panel", Inches(8.88), Inches(4.02),
-                 Inches(3.18), Inches(0.48), size=11, color=MUTED, align=PP_ALIGN.CENTER)
-    add_text(slide, "Limitation: original video IDs are unavailable, so video-level grouping cannot be guaranteed.",
-             Inches(0.73), Inches(6.53), Inches(11.7), Inches(0.35), size=12, color=RED, bold=True)
+    set_background(slide, PAPER)
+    add_header(slide, "01", "From raw VOC data to a locked test set", "The split is designed before training and keeps perceptual duplicate groups together")
+
+    # Data headline
+    rich_text(
+        slide,
+        [
+            ("877", {"size": 42, "color": NAVY, "bold": True, "font": FONT_HEAD}),
+            ("  documented images", {"size": 18, "color": MUTED, "bold": True}),
+        ],
+        Inches(0.66),
+        Inches(1.38),
+        Inches(4.35),
+        Inches(0.66),
+    )
+    pill(slide, "PASCAL VOC XML", Inches(5.05), Inches(1.49), Inches(1.52), NAVY)
+    pill(slide, "4 CLASSES", Inches(6.72), Inches(1.49), Inches(1.14), BLUE)
+    pill(slide, "SEED 42", Inches(8.01), Inches(1.49), Inches(1.00), GREEN, text_color=NAVY)
+
+    # Four-step pipeline
+    xs = [0.66, 3.77, 6.88, 9.99]
+    steps = [
+        (1, "Audit", "XML, classes, boxes, image sizes", BLUE),
+        (2, "Group", "SHA-256 + pHash ≤ 4", CYAN),
+        (3, "Split", "train / validation / locked test", ORANGE),
+        (4, "Convert", "normalized YOLO labels", RED),
+    ]
+    for i, (n, title, detail, accent) in enumerate(steps):
+        add_pipeline_step(slide, n, title, detail, Inches(xs[i]), Inches(2.25), Inches(2.62), accent=accent)
+        if i < 3:
+            textbox(slide, "→", Inches(xs[i] + 2.68), Inches(2.78), Inches(0.31), Inches(0.28), size=21, color=MUTED, bold=True, align=PP_ALIGN.CENTER)
+
+    # Class strip
+    rect(slide, Inches(0.66), Inches(4.20), Inches(12.00), Inches(1.66), NAVY, radius=True)
+    class_items = [
+        ("00", "crosswalk", CYAN),
+        ("01", "speed limit", BLUE),
+        ("02", "stop", RED),
+        ("03", "traffic light", ORANGE),
+    ]
+    for idx, (num, label, accent) in enumerate(class_items):
+        x = Inches(0.94 + idx * 2.93)
+        circle(slide, x, Inches(4.55), Inches(0.52), accent)
+        textbox(slide, num, x, Inches(4.69), Inches(0.52), Inches(0.15), size=9, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+        textbox(slide, label, x + Inches(0.70), Inches(4.53), Inches(1.92), Inches(0.27), size=14, color=WHITE, bold=True, font=FONT_HEAD)
+        if counts:
+            total = sum(int(float(row.get(label.replace(" ", ""), 0) or 0)) for row in counts)
+            detail = f"{total} objects observed"
+        else:
+            detail = "count after Colab run"
+        textbox(slide, detail, x + Inches(0.70), Inches(4.91), Inches(1.92), Inches(0.23), size=9, color=C("A9B7CA"))
+
+    rect(slide, Inches(0.66), Inches(6.12), Inches(12.00), Inches(0.58), SOFT_RED, radius=True, line=C("F7C5CB"))
+    textbox(slide, "LIMITATION", Inches(0.89), Inches(6.32), Inches(0.84), Inches(0.16), size=8, color=RED, bold=True)
+    textbox(slide, "Source-video IDs are unavailable; perceptual grouping reduces near-duplicate leakage but cannot prove video-level separation.", Inches(1.78), Inches(6.26), Inches(10.56), Inches(0.26), size=10, color=INK, bold=True)
     add_footer(slide, 2)
-    set_notes(slide, "Explain VOC-to-YOLO conversion, the locked test set, and near-duplicate grouping. State the video-ID limitation.")
+    set_notes(
+        slide,
+        "The source contains 877 documented images with VOC boxes. The notebook audits every annotation, "
+        "groups exact and perceptual duplicates, reserves the provider hold-out for final testing, and converts labels to YOLO format. "
+        "The important limitation is that original video IDs are unavailable.",
+    )
 
-    # Slide 3
+    # ------------------------------------------------------------------ Slide 3
     slide = prs.slides.add_slide(blank)
-    add_title(slide, "02", "One controlled change",
-              "Both runs begin from the same pretrained yolo11n.pt checkpoint")
-    add_rect(slide, Inches(0.72), Inches(1.35), Inches(5.55), Inches(4.55), PALE)
-    add_text(slide, "RUN A · BASELINE", Inches(1.03), Inches(1.72), Inches(4.92), Inches(0.35),
-             size=17, color=BLUE, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "hsv_v = 0.00", Inches(1.03), Inches(2.38), Inches(4.92), Inches(0.60),
-             size=34, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "No brightness jitter", Inches(1.03), Inches(3.10), Inches(4.92), Inches(0.34),
-             size=17, color=MUTED, align=PP_ALIGN.CENTER)
-    add_rect(slide, Inches(7.05), Inches(1.35), Inches(5.55), Inches(4.55), NAVY)
-    add_text(slide, "RUN B · EXPERIMENT", Inches(7.36), Inches(1.72), Inches(4.92), Inches(0.35),
-             size=17, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "hsv_v = 0.35", Inches(7.36), Inches(2.38), Inches(4.92), Inches(0.60),
-             size=34, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "Moderate brightness jitter", Inches(7.36), Inches(3.10), Inches(4.92), Inches(0.34),
-             size=17, color=RGBColor(190, 205, 226), align=PP_ALIGN.CENTER)
-    add_rect(slide, Inches(4.72), Inches(4.22), Inches(3.92), Inches(1.22), WHITE, line=CYAN)
-    add_text(slide, "FIXED", Inches(5.00), Inches(4.42), Inches(3.35), Inches(0.24),
-             size=11, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "512 px · 14 epochs · batch 16\nSGD · lr 0.01 · seed 42", Inches(4.97), Inches(4.75),
-             Inches(3.42), Inches(0.50), size=14, color=INK, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, "Hypothesis: brightness variation may improve validation mAP@0.50; improvement is not assumed.",
-             Inches(1.03), Inches(6.28), Inches(11.26), Inches(0.42), size=14, color=INK,
-             bold=True, align=PP_ALIGN.CENTER)
-    add_footer(slide, 3)
-    set_notes(slide, "Emphasize that only hsv_v changes. All other settings, including initialization and data split, are identical.")
+    set_background(slide, NAVY)
+    add_header(slide, "02", "One variable changes. Everything else stays fixed.", "A controlled comparison—not a hyperparameter search", dark=True)
 
-    # Slide 4
+    # Baseline panel
+    rect(slide, Inches(0.66), Inches(1.42), Inches(5.56), Inches(3.58), NAVY_2, radius=True, line=C("36506E"), line_width=1.5)
+    add_moon(slide, Inches(1.07), Inches(1.83), Inches(0.72))
+    pill(slide, "RUN A · BASELINE", Inches(2.02), Inches(1.88), Inches(1.76), C("243A54"), text_color=C("C8D5E6"))
+    textbox(slide, "hsv_v", Inches(1.07), Inches(2.82), Inches(1.50), Inches(0.28), size=13, color=C("93A8C0"), bold=True)
+    textbox(slide, "0.00", Inches(1.07), Inches(3.14), Inches(2.35), Inches(0.70), size=45, color=WHITE, bold=True, font=FONT_HEAD)
+    textbox(slide, "No brightness jitter", Inches(1.10), Inches(4.04), Inches(3.25), Inches(0.31), size=16, color=C("B2C2D4"), bold=True)
+    rect(slide, Inches(4.50), Inches(2.00), Inches(1.22), Inches(2.48), C("101B2A"), radius=True)
+    add_speed_sign(slide, Inches(4.73), Inches(2.37), Inches(0.76), "50")
+    textbox(slide, "same scene", Inches(4.61), Inches(3.53), Inches(1.00), Inches(0.20), size=8, color=C("758AA4"), align=PP_ALIGN.CENTER)
+
+    # Experiment panel
+    rect(slide, Inches(7.11), Inches(1.42), Inches(5.56), Inches(3.58), C("163752"), radius=True, line=CYAN, line_width=1.8)
+    add_sun(slide, Inches(7.52), Inches(1.83), Inches(0.72))
+    pill(slide, "RUN B · EXPERIMENT", Inches(8.47), Inches(1.88), Inches(2.05), CYAN, text_color=NAVY)
+    textbox(slide, "hsv_v", Inches(7.52), Inches(2.82), Inches(1.50), Inches(0.28), size=13, color=C("9EDBD6"), bold=True)
+    textbox(slide, "0.35", Inches(7.52), Inches(3.14), Inches(2.35), Inches(0.70), size=45, color=CYAN, bold=True, font=FONT_HEAD)
+    textbox(slide, "Moderate brightness jitter", Inches(7.55), Inches(4.04), Inches(3.35), Inches(0.31), size=16, color=WHITE, bold=True)
+    rect(slide, Inches(10.95), Inches(2.00), Inches(1.22), Inches(2.48), C("DBEAF4"), radius=True)
+    add_speed_sign(slide, Inches(11.18), Inches(2.37), Inches(0.76), "50")
+    textbox(slide, "same scene", Inches(11.06), Inches(3.53), Inches(1.00), Inches(0.20), size=8, color=C("5C6F84"), align=PP_ALIGN.CENTER)
+
+    # One-variable bridge
+    pill(slide, "ONLY THIS CHANGES", Inches(5.35), Inches(2.92), Inches(2.64), ORANGE, text_color=NAVY)
+    line(slide, Inches(6.22), Inches(3.61), Inches(7.11), Inches(3.61), ORANGE, 2)
+    line(slide, Inches(6.22), Inches(3.61), Inches(6.04), Inches(3.49), ORANGE, 2)
+    line(slide, Inches(6.22), Inches(3.61), Inches(6.04), Inches(3.73), ORANGE, 2)
+    line(slide, Inches(7.11), Inches(3.61), Inches(6.93), Inches(3.49), ORANGE, 2)
+    line(slide, Inches(7.11), Inches(3.61), Inches(6.93), Inches(3.73), ORANGE, 2)
+
+    textbox(slide, "FIXED IN BOTH RUNS", Inches(0.70), Inches(5.42), Inches(1.90), Inches(0.23), size=9, color=CYAN, bold=True)
+    settings = ["YOLO11n", "512 × 512", "14 epochs", "batch 16", "SGD · 0.01", "seed 42", "same split"]
+    x = 0.70
+    for setting in settings:
+        width = 1.28 if len(setting) < 10 else 1.54
+        pill(slide, setting, Inches(x), Inches(5.80), Inches(width), C("1D314A"), text_color=WHITE, border=C("3A526E"))
+        x += width + 0.16
+    rect(slide, Inches(0.70), Inches(6.37), Inches(11.92), Inches(0.42), C("13283D"), radius=True)
+    textbox(slide, "HYPOTHESIS  ·  brightness variation may improve validation mAP@0.50 across darker and brighter scenes", Inches(0.93), Inches(6.50), Inches(11.46), Inches(0.16), size=9, color=C("BDD0E2"), bold=True, align=PP_ALIGN.CENTER)
+    add_footer(slide, 3, dark=True)
+    set_notes(
+        slide,
+        "Both runs start from the same pretrained YOLO11n weights and use the same data split, optimizer, seed, image size and duration. "
+        "Only HSV value augmentation changes from zero to 0.35. The hypothesis is written before training, and an improvement is not required.",
+    )
+
+    # ------------------------------------------------------------------ Slide 4
     slide = prs.slides.add_slide(blank)
-    add_title(slide, "03", "Validation comparison and model selection",
-              "Selection: highest validation mAP@0.50, then validation Precision")
-    if validation:
-        rows = [["Run", "hsv_v", "Precision", "Recall", "mAP@0.50", "Time"]]
-        for row in validation:
-            short = "A · baseline" if "baseline" in row.get("run", "") else "B · brightness"
-            rows.append([short, row.get("hsv_v", ""), metric(row.get("precision")),
-                         metric(row.get("recall")), metric(row.get("mAP50")),
-                         minutes(row.get("training_minutes"))])
-        add_table(slide, rows, Inches(0.72), Inches(1.45), [2.25, 1.0, 1.55, 1.4, 1.65, 1.35], row_height=0.64)
-        chosen = selection.get("selected_run", "Pending")
-        add_rect(slide, Inches(0.72), Inches(4.15), Inches(6.18), Inches(1.30), NAVY)
-        add_text(slide, "SELECTED ON VALIDATION", Inches(1.02), Inches(4.43), Inches(5.58), Inches(0.25),
-                 size=11, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
-        add_text(slide, chosen, Inches(1.00), Inches(4.79), Inches(5.60), Inches(0.38),
-                 size=19, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-        winner = next((r for r in validation if r.get("run") == chosen), {})
-        add_metric_card(slide, "WINNER mAP@0.50", metric(winner.get("mAP50")), Inches(7.38), Inches(4.15), CYAN)
-        add_metric_card(slide, "WINNER PRECISION", metric(winner.get("precision")), Inches(9.75), Inches(4.15), BLUE)
+    set_background(slide, PAPER)
+    add_header(slide, "03", "Validation decides the winner", "The locked test set remains invisible until after model selection")
+
+    validation_by_name = {row.get("run", ""): row for row in validation}
+    base = validation_by_name.get("baseline_no_brightness", {})
+    exp = validation_by_name.get("experiment_brightness_035", {})
+    chosen = selection.get("selected_run")
+
+    # Run name labels
+    pill(slide, "A · hsv_v 0.00", Inches(0.70), Inches(1.39), Inches(1.55), NAVY)
+    pill(slide, "B · hsv_v 0.35", Inches(6.86), Inches(1.39), Inches(1.55), CYAN, text_color=NAVY)
+    if measured and chosen:
+        winner_x = 0.70 if chosen == "baseline_no_brightness" else 6.86
+        pill(slide, "SELECTED", Inches(winner_x + 1.72), Inches(1.39), Inches(1.10), GREEN, text_color=NAVY)
     else:
-        add_rect(slide, Inches(0.72), Inches(1.45), Inches(11.88), Inches(3.75), PALE)
-        add_text(slide, "RESULTS PENDING", Inches(1.22), Inches(2.20), Inches(10.88), Inches(0.55),
-                 size=31, color=ORANGE, bold=True, align=PP_ALIGN.CENTER)
-        add_text(slide, "Run the full Colab notebook. The deck will read validation_table.csv\nand model_selection.json without estimating any metric.",
-                 Inches(1.22), Inches(3.06), Inches(10.88), Inches(1.10), size=18, color=INK,
-                 align=PP_ALIGN.CENTER)
-    add_text(slide, "The locked test set is not used to choose the winner or revise settings.",
-             Inches(0.92), Inches(6.32), Inches(11.48), Inches(0.38), size=14, color=RED,
-             bold=True, align=PP_ALIGN.CENTER)
+        pill(slide, "AWAITING COLAB RUN", Inches(10.15), Inches(1.39), Inches(2.18), ORANGE, text_color=NAVY)
+
+    labels = [("Precision", "precision", BLUE), ("Recall", "recall", ORANGE), ("mAP@0.50", "mAP50", CYAN)]
+    for i, (label, key, accent) in enumerate(labels):
+        x1 = Inches(0.70 + i * 1.84)
+        x2 = Inches(6.86 + i * 1.84)
+        add_metric_card(slide, label, metric(base.get(key)), x1, Inches(2.03), Inches(1.62), accent=accent, sub="validation")
+        add_metric_card(slide, label, metric(exp.get(key)), x2, Inches(2.03), Inches(1.62), accent=accent, sub="validation")
+    add_metric_card(slide, "Training time", minutes(base.get("training_minutes")), Inches(0.70), Inches(3.56), Inches(5.54), accent=MUTED, sub="Run A wall-clock time")
+    add_metric_card(slide, "Training time", minutes(exp.get("training_minutes")), Inches(6.86), Inches(3.56), Inches(5.54), accent=MUTED, sub="Run B wall-clock time")
+
+    # Selection logic
+    rect(slide, Inches(0.70), Inches(5.18), Inches(11.70), Inches(1.14), NAVY, radius=True)
+    textbox(slide, "MODEL SELECTION", Inches(0.98), Inches(5.42), Inches(1.42), Inches(0.18), size=9, color=CYAN, bold=True)
+    circle(slide, Inches(2.61), Inches(5.31), Inches(0.40), CYAN)
+    textbox(slide, "1", Inches(2.63), Inches(5.36), Inches(0.34), Inches(0.34), size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE)
+    textbox(slide, "highest validation mAP@0.50", Inches(3.18), Inches(5.40), Inches(2.42), Inches(0.22), size=11, color=WHITE, bold=True)
+    textbox(slide, "→", Inches(5.69), Inches(5.37), Inches(0.35), Inches(0.25), size=17, color=C("8195AD"), bold=True, align=PP_ALIGN.CENTER)
+    circle(slide, Inches(6.17), Inches(5.31), Inches(0.40), ORANGE)
+    textbox(slide, "2", Inches(6.19), Inches(5.36), Inches(0.34), Inches(0.34), size=13, color=NAVY, bold=True, align=PP_ALIGN.CENTER, valign=MSO_ANCHOR.MIDDLE)
+    textbox(slide, "Precision tie-break", Inches(6.75), Inches(5.40), Inches(1.70), Inches(0.22), size=11, color=WHITE, bold=True)
+    textbox(slide, "→", Inches(8.54), Inches(5.37), Inches(0.35), Inches(0.25), size=17, color=C("8195AD"), bold=True, align=PP_ALIGN.CENTER)
+    pill(slide, "best.pt → final_best.pt", Inches(9.02), Inches(5.36), Inches(2.88), GREEN, text_color=NAVY)
+    pill(slide, "TEST SET LOCKED", Inches(4.98), Inches(6.51), Inches(2.32), RED)
+    textbox(slide, "No tuning after test metrics", Inches(7.48), Inches(6.58), Inches(2.70), Inches(0.18), size=9, color=RED, bold=True)
     add_footer(slide, 4)
-    set_notes(slide, "Read the two validation rows, identify the winner, and explain that test performance played no role in selection.")
+    set_notes(
+        slide,
+        "Compare Precision, Recall, mAP at 0.50 and time for both validation runs. "
+        "The winner is selected by validation mAP, then Precision as a tie-breaker. "
+        "The final test set is not used to choose the model or revise settings.",
+    )
 
-    # Slide 5
+    # ------------------------------------------------------------------ Slide 5
     slide = prs.slides.add_slide(blank)
-    add_title(slide, "04", "Held-out test, error review and conclusion",
-              "Test is evaluated once after model selection")
+    set_background(slide, NAVY)
+    add_header(slide, "04", "Final evidence, failure review and conclusion", "The conclusion is limited to this dataset, split and single run per condition", dark=True)
+
     test_metrics = test.get("metrics", {})
-    add_metric_card(slide, "TEST PRECISION", metric(test_metrics.get("precision")), Inches(0.72), Inches(1.35), CYAN)
-    add_metric_card(slide, "TEST RECALL", metric(test_metrics.get("recall")), Inches(3.00), Inches(1.35), BLUE)
-    add_metric_card(slide, "TEST mAP@0.50", metric(test_metrics.get("mAP50")), Inches(5.28), Inches(1.35), ORANGE)
-    chosen = test.get("selected_run") or selection.get("selected_run") or "Pending after run"
-    add_rect(slide, Inches(7.65), Inches(1.35), Inches(4.95), Inches(1.02), NAVY)
-    add_text(slide, "FINAL CHECKPOINT", Inches(7.94), Inches(1.55), Inches(4.37), Inches(0.20),
-             size=10, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
-    add_text(slide, str(chosen), Inches(7.93), Inches(1.85), Inches(4.39), Inches(0.30),
-             size=14, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    selected = test.get("selected_run") or selection.get("selected_run")
+    add_metric_card(slide, "Test Precision", metric(test_metrics.get("precision")), Inches(0.66), Inches(1.42), Inches(2.22), accent=CYAN, dark=True, sub="held-out test")
+    add_metric_card(slide, "Test Recall", metric(test_metrics.get("recall")), Inches(3.06), Inches(1.42), Inches(2.22), accent=BLUE, dark=True, sub="held-out test")
+    add_metric_card(slide, "Test mAP@0.50", metric(test_metrics.get("mAP50")), Inches(5.46), Inches(1.42), Inches(2.22), accent=ORANGE, dark=True, sub="held-out test")
+    rect(slide, Inches(7.98), Inches(1.42), Inches(4.66), Inches(1.28), C("13283D"), radius=True, line=C("38506D"))
+    textbox(slide, "SELECTED CHECKPOINT", Inches(8.25), Inches(1.64), Inches(4.12), Inches(0.18), size=9, color=CYAN, bold=True)
+    textbox(slide, selected or "pending after validation", Inches(8.25), Inches(2.02), Inches(4.10), Inches(0.31), size=16 if selected else 15, color=WHITE, bold=True, font=FONT_HEAD)
 
-    pictures: list[Path] = []
+    images: list[Path] = []
     if evidence:
-        pictures.extend(sorted(evidence.glob("failure_*.png"))[:2])
-        if not pictures and (evidence / "test_predictions_8.png").exists():
-            pictures.append(evidence / "test_predictions_8.png")
-    if pictures:
-        for idx, picture in enumerate(pictures[:2]):
-            x = Inches(0.72 + idx * 3.35)
-            add_rect(slide, x, Inches(2.75), Inches(3.08), Inches(2.65), PALE)
-            add_picture_contain(slide, picture, x + Inches(0.06), Inches(2.81), Inches(2.96), Inches(2.40))
-            add_text(slide, picture.stem, x + Inches(0.08), Inches(5.18), Inches(2.92), Inches(0.18),
-                     size=9, color=MUTED, align=PP_ALIGN.CENTER)
+        images.extend(sorted(evidence.glob("failure_*.png"))[:2])
+        if not images and (evidence / "test_predictions_8.png").exists():
+            images.append(evidence / "test_predictions_8.png")
+    if images:
+        for i, image_path in enumerate(images[:2]):
+            x = Inches(0.66 + i * 3.45)
+            rect(slide, x, Inches(3.02), Inches(3.18), Inches(2.45), C("12243A"), radius=True, line=C("38506D"))
+            add_picture_contain(slide, image_path, x + Inches(0.08), Inches(3.10), Inches(3.02), Inches(2.12))
+            textbox(slide, image_path.stem.replace("_", " "), x + Inches(0.12), Inches(5.25), Inches(2.94), Inches(0.16), size=8, color=C("9DB0C5"), align=PP_ALIGN.CENTER)
     else:
-        add_rect(slide, Inches(0.72), Inches(2.75), Inches(6.43), Inches(2.65), PALE)
-        add_text(slide, "REAL FAILURE IMAGES\nPENDING", Inches(1.12), Inches(3.47), Inches(5.63), Inches(0.90),
-                 size=25, color=ORANGE, bold=True, align=PP_ALIGN.CENTER)
+        rect(slide, Inches(0.66), Inches(3.02), Inches(6.64), Inches(2.45), C("12243A"), radius=True, line=C("38506D"))
+        # Abstract prediction canvas
+        rect(slide, Inches(0.94), Inches(3.32), Inches(2.66), Inches(1.72), C("1B334B"), radius=True)
+        add_crosswalk_sign(slide, Inches(1.20), Inches(3.59), Inches(0.78))
+        rect(slide, Inches(1.08), Inches(3.48), Inches(1.12), Inches(1.12), C("1B334B"), radius=False, line=GREEN, line_width=2)
+        pill(slide, "GT crosswalk", Inches(1.04), Inches(4.68), Inches(1.18), GREEN, text_color=NAVY)
+        rect(slide, Inches(3.93), Inches(3.32), Inches(2.88), Inches(1.72), C("1B334B"), radius=True)
+        add_stop_sign(slide, Inches(4.28), Inches(3.60), Inches(0.76))
+        rect(slide, Inches(4.11), Inches(3.46), Inches(1.14), Inches(1.14), C("1B334B"), radius=False, line=ORANGE, line_width=2)
+        pill(slide, "PRED stop 0.84", Inches(4.06), Inches(4.68), Inches(1.40), ORANGE, text_color=NAVY)
+        textbox(slide, "REAL PREDICTION & FAILURE IMAGES APPEAR HERE AFTER THE COLAB RUN", Inches(1.16), Inches(5.19), Inches(5.62), Inches(0.18), size=8, color=C("9DB0C5"), bold=True, align=PP_ALIGN.CENTER)
 
-    cases = failures.get("cases", []) if isinstance(failures, dict) else []
-    case_text = "\n".join(
-        f"• {c.get('image', 'image')}: {', '.join(c.get('failure_types') or ['challenging correct case'])}"
-        for c in cases[:3]
-    ) or "• Inspect exported green GT and orange prediction boxes\n• Confirm causes from visible evidence\n• Do not turn possible causes into measured claims"
-    add_rect(slide, Inches(7.48), Inches(2.75), Inches(5.12), Inches(2.65), WHITE, line=PALE)
-    add_text(slide, "ERROR REVIEW", Inches(7.78), Inches(3.00), Inches(4.52), Inches(0.26),
-             size=13, color=BLUE, bold=True)
-    add_text(slide, case_text, Inches(7.78), Inches(3.40), Inches(4.46), Inches(1.63),
-             size=13, color=INK)
-    conclusion = ("Measured conclusion: compare the two validation runs and keep the claim limited to this split."
-                  if measured else
-                  "Conclusion remains pending until both runs, locked-test evaluation and manual failure review finish.")
-    add_text(slide, conclusion, Inches(0.86), Inches(6.10), Inches(11.60), Inches(0.55),
-             size=15, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
-    add_footer(slide, 5)
-    set_notes(slide, "Report only measured test values. Describe visible failures, limitations, and the appropriately narrow conclusion.")
+    # Conclusion / checklist
+    rect(slide, Inches(7.62), Inches(3.02), Inches(5.02), Inches(2.45), C("13283D"), radius=True, line=C("38506D"))
+    if measured:
+        cases = failures.get("cases", []) if isinstance(failures, dict) else []
+        textbox(slide, "EVIDENCE-BASED REVIEW", Inches(7.94), Inches(3.34), Inches(4.38), Inches(0.24), size=12, color=CYAN, bold=True)
+        rows = []
+        for case in cases[:3]:
+            kinds = ", ".join(case.get("failure_types") or ["challenging correct case"])
+            rows.append(f"• {case.get('image', 'image')}: {kinds}")
+        text = "\n".join(rows) or "• Review green ground-truth and orange prediction boxes\n• Confirm causes from visible evidence"
+        textbox(slide, text, Inches(7.94), Inches(3.78), Inches(4.34), Inches(1.00), size=11, color=WHITE)
+        textbox(slide, "Claim only what this split and one run per condition support.", Inches(7.94), Inches(4.95), Inches(4.30), Inches(0.28), size=10, color=ORANGE, bold=True)
+        conclusion = "The measured conclusion must compare validation runs and remain narrow."
+    else:
+        textbox(slide, "FINISH BEFORE DEFENSE", Inches(7.94), Inches(3.31), Inches(4.38), Inches(0.24), size=12, color=ORANGE, bold=True)
+        checklist = [
+            ("01", "Run both trainings"),
+            ("02", "Evaluate locked test once"),
+            ("03", "Inspect three failure cases"),
+            ("04", "Regenerate this deck"),
+        ]
+        for idx, (num, label) in enumerate(checklist):
+            y = 3.74 + idx * 0.37
+            circle(slide, Inches(7.96), Inches(y), Inches(0.25), C("29445F"))
+            textbox(slide, num, Inches(7.96), Inches(y + 0.07), Inches(0.25), Inches(0.10), size=6, color=CYAN, bold=True, align=PP_ALIGN.CENTER)
+            textbox(slide, label, Inches(8.36), Inches(y + 0.02), Inches(3.56), Inches(0.18), size=10, color=WHITE, bold=True)
+        button = rect(slide, Inches(10.44), Inches(4.84), Inches(1.74), Inches(0.40), CYAN, radius=True)
+        button.click_action.hyperlink.address = COLAB_URL
+        box = textbox(slide, "OPEN COLAB ↗", Inches(10.54), Inches(4.96), Inches(1.54), Inches(0.16), size=8, color=NAVY, bold=True, align=PP_ALIGN.CENTER)
+        box.text_frame.paragraphs[0].runs[0].hyperlink.address = COLAB_URL
+        conclusion = "Conclusion pending: no checkpoint and no measured metric are claimed yet."
+
+    rect(slide, Inches(0.66), Inches(5.85), Inches(11.98), Inches(0.70), C("173047"), radius=True)
+    textbox(slide, "CONCLUSION", Inches(0.93), Inches(6.09), Inches(1.05), Inches(0.16), size=8, color=CYAN, bold=True)
+    textbox(slide, conclusion, Inches(2.12), Inches(6.02), Inches(9.98), Inches(0.27), size=13, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    pill(slide, "SMALL DATA", Inches(0.74), Inches(6.67), Inches(1.12), C("243A54"), text_color=C("B8C7D9"))
+    pill(slide, "ONE RUN / CONDITION", Inches(1.99), Inches(6.67), Inches(1.80), C("243A54"), text_color=C("B8C7D9"))
+    pill(slide, "NO VIDEO IDs", Inches(3.92), Inches(6.67), Inches(1.30), C("243A54"), text_color=C("B8C7D9"))
+    pill(slide, "NOT SAFETY-CRITICAL", Inches(5.35), Inches(6.67), Inches(1.85), C("243A54"), text_color=C("B8C7D9"))
+    add_footer(slide, 5, dark=True)
+    set_notes(
+        slide,
+        "After model selection, evaluate the chosen checkpoint once on the held-out test set. "
+        "Show real predictions and failure cases, then describe only what is visible. "
+        "The conclusion must remain limited by the small dataset, one run per condition and missing source-video IDs.",
+    )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     prs.save(output)
@@ -431,4 +790,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
