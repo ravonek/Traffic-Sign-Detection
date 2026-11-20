@@ -1,0 +1,22 @@
+PROJECT STATUS — NOT YET TRAINED
+Updated: 2026-11-20 (Asia/Almaty)
+
+READY
+- Reproducible Colab notebook
+- Dataset audit and grouped split logic
+- Two-run controlled experiment (hsv_v 0.00 vs 0.35)
+- Validation-based model selection and locked test evaluation
+- Prediction and failure-analysis export
+- README, run guide, defense Q&A and presentation builder
+
+PENDING — MUST BE COMPLETED BEFORE SUBMISSION
+- Run every Colab cell on a GPU through the final ZIP export
+- Save the executed notebook with cell outputs
+- Add generated evidence files and observed metrics
+- Review the exported failure images and write evidence-based explanations
+- Publish final_best.pt at a working public URL
+- Regenerate the presentation from the real artifact ZIP
+- Replace all README/presentation/speech placeholders
+
+No trained checkpoint or measured metric is claimed in the current repository.
+
