@@ -1,0 +1,45 @@
+{
+  "actual_automatic_failures_found": 6,
+  "diagnostic_IoU_match_threshold": 0.5,
+  "annotation": "GREEN = ground truth; ORANGE = predictions; inspect for real causes",
+  "cases": [
+    {
+      "image": "road100.png",
+      "failure_types": [
+        "extra / unmatched detection",
+        "wrong class"
+      ],
+      "ground_truth_objects": 1,
+      "predictions": 1,
+      "inspected_manually": true,
+      "manual_observation": "The ground-truth object is a circular speed-limit 50 sign, but the model predicts stop with 0.99 confidence over the same sign.",
+      "possible_causes": "Hypothesis only: the model may be relying on dominant sign appearance rather than the internal digits; the image alone does not establish the cause.",
+      "image_file": "failure_01.png"
+    },
+    {
+      "image": "road124.png",
+      "failure_types": [
+        "missed sign"
+      ],
+      "ground_truth_objects": 4,
+      "predictions": 1,
+      "inspected_manually": true,
+      "manual_observation": "The crosswalk sign is detected correctly at 1.00 confidence, while all three annotated traffic-light objects are missed. The upper-right light is partly cropped and the two lower lights are small and dark.",
+      "possible_causes": "Hypothesis only: object scale, partial cropping and the appearance of pedestrian signal heads may contribute to the misses.",
+      "image_file": "failure_02.png"
+    },
+    {
+      "image": "road319.png",
+      "failure_types": [
+        "extra / unmatched detection",
+        "missed sign"
+      ],
+      "ground_truth_objects": 3,
+      "predictions": 3,
+      "inspected_manually": true,
+      "manual_observation": "The speed-limit sign and traffic light are detected, but the very small crosswalk sign is not matched; an overlapping low-confidence box is classified as speedlimit at 0.33.",
+      "possible_causes": "Hypothesis only: the crosswalk sign is very small and distant, which may increase localization and class ambiguity.",
+      "image_file": "failure_03.png"
+    }
+  ]
+}

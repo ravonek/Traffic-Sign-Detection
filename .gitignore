@@ -18,12 +18,13 @@ evaluations/
 *.tar
 *.zip
 
-# Model weights are published separately because they can exceed GitHub limits
+# Generated model weights are ignored by default. The selected 5.2 MB checkpoint
+# is intentionally versioned for reproducible inference.
 weights/*.pt
 *.onnx
 *.engine
 
 # Keep the expected folders in Git
 !weights/.gitkeep
-!evidence/README.txt
+!weights/final_best.pt
 

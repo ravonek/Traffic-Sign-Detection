@@ -1,0 +1,8 @@
+{
+  "python": "3.11.6",
+  "ultralytics": "8.3.220",
+  "torch": "2.14.1",
+  "gpu": "CPU",
+  "seed": 42,
+  "device": "cpu"
+}

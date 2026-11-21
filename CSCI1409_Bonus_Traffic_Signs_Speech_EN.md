@@ -1,22 +1,51 @@
 # 3-minute defense speech
 
-## Slide 1 — Task and question
+## Slide 1 — Task and research question
 
-Hello. My bonus project is traffic-sign detection with YOLO11n. The detector recognizes four classes: crosswalk, speed limit, stop sign and traffic light. Unlike classification, this task predicts both the class and the bounding-box location. My research question is whether brightness augmentation improves detection under varied lighting.
+Hello. My project is four-class traffic-sign detection with a pretrained
+YOLO11n model. It detects crosswalk signs, speed-limit signs, stop signs and
+traffic lights. Unlike image classification, object detection must predict both
+the class and the bounding-box location. My research question was whether one
+controlled change—brightness augmentation—would improve detection on this
+dataset.
 
-## Slide 2 — Dataset and preparation
+## Slide 2 — Dataset and leakage-aware preparation
 
-The public source contains 877 annotated road images in PASCAL VOC format. The notebook checks XML files and bounding boxes, converts them to normalized YOLO labels and displays real ground-truth examples. I reserve the provider hold-out for final testing. The remaining images are grouped using exact checksums and perceptual hashes before the seeded train-validation split, which reduces duplicate leakage. A limitation is that original video IDs are unavailable.
+The public PASCAL VOC source contains 877 images and 1,244 annotated objects. My
+final split has 559 training images, 140 validation images and 178 locked test
+images. The notebook validates XML labels and bounding boxes, converts them to
+normalized YOLO format and displays real ground-truth examples. Before splitting,
+it groups exact duplicates by SHA-256 and near duplicates by perceptual hash.
+The provider hold-out is reserved for testing. A limitation is that original
+video IDs are unavailable, so video-level separation cannot be guaranteed.
 
-## Slide 3 — Model and experiment
+## Slide 3 — Controlled experiment
 
-Both experiments fine-tune the same pretrained YOLO11n with 512-pixel images for 14 epochs using SGD. I keep the split, initialization, optimizer, seed and all other augmentation settings fixed. The baseline uses no brightness jitter, while the experimental run changes only HSV value augmentation from zero to 0.35. My pre-training hypothesis is that this may improve validation mAP at IoU 0.50.
+Both runs start from the same `yolo11n.pt` weights and use 512-pixel images, 14
+epochs, batch size 16, SGD with learning rate 0.01 and seed 42. Both were run on
+an Apple M3 CPU. The baseline uses `hsv_v` zero. The experimental run changes
+only `hsv_v` to 0.35. All other listed augmentations and settings remain fixed.
+My pre-training hypothesis was that moderate brightness variation could improve
+validation mAP at IoU 0.50.
 
-## Slide 4 — Validation and selection
+## Slide 4 — Validation results and selection
 
-Replace this paragraph after the actual run: report the baseline and experimental Precision, Recall, mAP@0.50 and training time from `validation_table.csv`. State which run won on validation mAP@0.50. Do not use test results to justify the choice, because the test set stays locked until after model selection.
+The baseline reached 0.9404 Precision, 0.8548 Recall and 0.9098 mAP at 0.50 in
+51.48 minutes. The brightness run reached 0.9198 Precision, 0.8915 Recall and
+0.9184 mAP at 0.50 in 49.35 minutes. Therefore, brightness augmentation improved
+Recall by about 0.0367 and mAP by about 0.0085, but reduced Precision by about
+0.0206. According to the predefined validation rule, I selected
+`experiment_brightness_035`. The test set was not used for selection or tuning.
 
-## Slide 5 — Test result, failures and conclusion
+## Slide 5 — Locked test, failures and conclusion
 
-Replace this paragraph after the actual run: report final held-out test Precision, Recall and mAP@0.50 from `test_metrics.json`. Show real prediction and failure images, then describe what is actually visible. Possible issues include small distant signs, low contrast, occlusion or inaccurate boxes, but they must be confirmed by inspection. The main limitations are the small dataset, one run per condition and missing source-video IDs. This experiment is educational and is not validated for safety-critical deployment.
+The selected checkpoint achieved 0.9315 Precision, 0.8717 Recall, 0.9183 mAP at
+0.50 and 0.7403 mAP from 0.50 to 0.95 on the locked test set. Manual review shows
+three representative errors: a speed-limit 50 sign classified as stop, three
+missed traffic-light annotations in one scene, and a very small crosswalk sign
+classified as a low-confidence speed-limit sign. Small scale or cropping may
+contribute in the latter cases, but these are hypotheses, not proven causes.
+Overall, the brightness run performed better on validation Recall and mAP for
+this split. With only one run per condition, I do not claim that it will always
+generalize better under every lighting condition.
 

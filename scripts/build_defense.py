@@ -700,15 +700,15 @@ def build_deck(artifacts: Path | None, output: Path) -> None:
 
     images: list[Path] = []
     if evidence:
-        images.extend(sorted(evidence.glob("failure_*.png"))[:2])
+        images.extend(sorted(evidence.glob("failure_*.png"))[:3])
         if not images and (evidence / "test_predictions_8.png").exists():
             images.append(evidence / "test_predictions_8.png")
     if images:
-        for i, image_path in enumerate(images[:2]):
-            x = Inches(0.66 + i * 3.45)
-            rect(slide, x, Inches(3.02), Inches(3.18), Inches(2.45), C("12243A"), radius=True, line=C("38506D"))
-            add_picture_contain(slide, image_path, x + Inches(0.08), Inches(3.10), Inches(3.02), Inches(2.12))
-            textbox(slide, image_path.stem.replace("_", " "), x + Inches(0.12), Inches(5.25), Inches(2.94), Inches(0.16), size=8, color=C("9DB0C5"), align=PP_ALIGN.CENTER)
+        for i, image_path in enumerate(images[:3]):
+            x = Inches(0.66 + i * 2.20)
+            rect(slide, x, Inches(3.02), Inches(2.06), Inches(2.45), C("12243A"), radius=True, line=C("38506D"))
+            add_picture_contain(slide, image_path, x + Inches(0.08), Inches(3.10), Inches(1.90), Inches(2.12))
+            textbox(slide, image_path.stem.replace("_", " "), x + Inches(0.12), Inches(5.25), Inches(1.82), Inches(0.16), size=8, color=C("9DB0C5"), align=PP_ALIGN.CENTER)
     else:
         rect(slide, Inches(0.66), Inches(3.02), Inches(6.64), Inches(2.45), C("12243A"), radius=True, line=C("38506D"))
         # Abstract prediction canvas
@@ -734,7 +734,16 @@ def build_deck(artifacts: Path | None, output: Path) -> None:
         text = "\n".join(rows) or "• Review green ground-truth and orange prediction boxes\n• Confirm causes from visible evidence"
         textbox(slide, text, Inches(7.94), Inches(3.78), Inches(4.34), Inches(1.00), size=11, color=WHITE)
         textbox(slide, "Claim only what this split and one run per condition support.", Inches(7.94), Inches(4.95), Inches(4.30), Inches(0.28), size=10, color=ORANGE, bold=True)
-        conclusion = "The measured conclusion must compare validation runs and remain narrow."
+        try:
+            delta_recall = float(exp["recall"]) - float(base["recall"])
+            delta_map = float(exp["mAP50"]) - float(base["mAP50"])
+            delta_precision = float(exp["precision"]) - float(base["precision"])
+            conclusion = (
+                f"Brightness changed validation: Recall {delta_recall:+.4f}, "
+                f"mAP@0.50 {delta_map:+.4f}, Precision {delta_precision:+.4f}."
+            )
+        except (KeyError, TypeError, ValueError):
+            conclusion = "The measured conclusion is limited to this split and one run per condition."
     else:
         textbox(slide, "FINISH BEFORE DEFENSE", Inches(7.94), Inches(3.31), Inches(4.38), Inches(0.24), size=12, color=ORANGE, bold=True)
         checklist = [

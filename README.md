@@ -2,197 +2,190 @@
 
 **CSCI1409 Deep Learning · KBTU · Fall 2026 · Individual Bonus Project**
 
-> **Project status:** The complete training and evaluation pipeline is implemented, but the provided source package does **not** contain trained checkpoints or measured results yet. Run the Colab notebook, export the evidence, and replace the result placeholders below **before submission**. Do not report fabricated metrics.
+> **Status: completed.** Both controlled training runs, validation-based model
+> selection and one locked-test evaluation were executed on November 20, 2026.
+> This repository contains the executed notebook, measured evidence, selected
+> checkpoint, presentation and two short demonstration videos.
 
-## 1. Project overview
+## Result at a glance
 
-This project fine-tunes a pretrained **YOLO11n object detector** to recognize four types of road signs and signals in real street photographs. Unlike image classification, object detection predicts **where an object is** (a bounding box), **what it is** (class), and **how confident the model is** (confidence score).
+| Selected model | Test Precision | Test Recall | Test mAP@0.50 | Test mAP@0.50:0.95 |
+| --- | ---: | ---: | ---: | ---: |
+| `experiment_brightness_035` | **0.9315** | **0.8717** | **0.9183** | **0.7403** |
 
-**Classes (class IDs used by the notebook):**
+**Research question:** does moderate HSV brightness augmentation improve
+road-sign detection under varied lighting?
+
+On this fixed split, changing only `hsv_v` from `0.00` to `0.35` increased
+validation Recall from **0.8548 to 0.8915** and validation mAP@0.50 from
+**0.9098 to 0.9184**, while validation Precision decreased from **0.9404 to
+0.9198**. This is evidence for this experiment, not a claim that brightness
+augmentation always improves performance.
+
+## Project files
+
+- [Executed notebook with all outputs](CSCI1409_Bonus_Traffic_Signs_Colab.ipynb)
+- [Open the notebook in Google Colab](https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb)
+- [Five-slide defense presentation](CSCI1409_Bonus_Traffic_Signs_Defense_3min.pptx)
+- [Three-minute speech](CSCI1409_Bonus_Traffic_Signs_Speech_EN.md)
+- [Defense questions and answers](DEFENSE_QA_RU_EN.md)
+- [Russian reproduction guide](HOW_TO_RUN_RU.md)
+- [Final checkpoint](weights/final_best.pt)
+- [Original and predicted demo videos](demo/README.md)
+
+## 1. Task and classes
+
+The project fine-tunes a pretrained **YOLO11n object detector** to predict a
+class, confidence and bounding box for four road-sign categories:
 
 | ID | Class | Meaning |
 | ---: | --- | --- |
 | 0 | `crosswalk` | Pedestrian crossing sign |
-| 1 | `speedlimit` | Speed limit sign |
+| 1 | `speedlimit` | Speed-limit sign |
 | 2 | `stop` | Stop sign |
-| 3 | `trafficlight` | Traffic light |
+| 3 | `trafficlight` | Traffic light or annotated signal head |
 
-**Research question:** Does adding brightness augmentation during fine-tuning improve road-sign detection under different lighting conditions?
+The detector is fine-tuned from `yolo11n.pt`; no new detection architecture is
+claimed.
 
-**Deliverables:** a reproducible Google Colab notebook, two controlled training runs, validation comparison, an independently evaluated final checkpoint, visual predictions, failure analysis, and a 3-minute defense presentation.
+## 2. Dataset, audit and split
 
-## 2. Dataset and annotations
+- **Original dataset:** [Road Sign Detection — andrewmvd](https://www.kaggle.com/datasets/andrewmvd/road-sign-detection)
+- **Download used by the notebook:** [PaddleDetection PASCAL VOC archive](https://paddlemodels.bj.bcebos.com/object_detection/roadsign_voc.tar)
+- **Original annotation format:** PASCAL VOC XML
+- **Training annotation format:** normalized YOLO labels
+- **Split seed:** `42`
 
-- **Dataset:** [Road Sign Detection — andrewmvd (Kaggle)](https://www.kaggle.com/datasets/andrewmvd/road-sign-detection).
-- **Download used by the notebook:** the [PaddleDetection prepared PASCAL VOC archive](https://paddlemodels.bj.bcebos.com/object_detection/roadsign_voc.tar), described in the [PaddleDetection dataset instructions](https://github.com/PaddlePaddle/PaddleDetection/blob/release/2.9/docs/tutorials/data/PrepareDetDataSet_en.md).
-- **Documented source size:** 877 images, four classes. The actual split sizes are computed from the downloaded data; the code does **not** assume that the final group-aware split has fixed numbers.
-- **Original annotations:** PASCAL VOC `.xml` files with labels and pixel-coordinate bounding boxes (`xmin`, `ymin`, `xmax`, `ymax`).
-- **Training annotations:** converted to YOLO `.txt` format: `class_id x_center y_center width height`, where the four coordinates are normalized to `[0, 1]`.
+The notebook validates missing annotations, unknown classes, image dimensions
+and bounding boxes. Before splitting, images are grouped by SHA-256 and
+perceptual hash (Hamming distance ≤ 4), so an exact or detected near-duplicate
+group cannot cross splits. The provider hold-out is reserved as the final test
+set.
 
-The notebook checks for missing XML annotations, unknown classes, invalid bounding boxes, image sizes, and exact/perceptual near-duplicates. It displays at least **five real images with ground-truth boxes** prior to training.
-
-### Data split and leakage prevention
-
-The source archive's provided held-out list, when available (`test.txt`, `valid.txt`, or `val.txt`), is reserved for the **locked final test set**. Remaining images are assigned to train/validation by a deterministic seeded grouped split. The notebook groups identical images (SHA-256) and visually similar images (perceptual hash, Hamming distance ≤ 4), keeping each group in **one split only**.
-
-- **Split random seed:** `42`
-- **Training set:** used to fine-tune the detector.
-- **Validation set:** used to compare the two runs and select the winning checkpoint.
-- **Test set:** used **once, after model selection**, for final metrics and predictions.
-
-**Important limitation:** Source-video IDs are not provided. Perceptual-hash grouping reduces near-duplicate leakage but cannot guarantee that different frames from the same original video stay in one split.
-
-The following files are generated on execution:
-
-- `evidence/dataset_counts.csv` — image **and object** counts for train/val/test, broken down by class.
-- `evidence/split_manifest.csv` — split membership, checksums, perceptual hashes, group IDs.
-- `evidence/dataset_audit.json` — validation checks and the split method.
-- `evidence/ground_truth_examples.png` — labeled example images.
-
-**Fill in the observed counts after running Colab:**
-
-| Split | Images | Total annotated objects | Crosswalk | Speedlimit | Stop | Trafficlight |
+| Split | Images | Objects | Crosswalk | Speedlimit | Stop | Trafficlight |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Train | _From `dataset_counts.csv`_ | — | — | — | — | — |
-| Validation | _From `dataset_counts.csv`_ | — | — | — | — | — |
-| Test | _From `dataset_counts.csv`_ | — | — | — | — | — |
+| Train | 559 | 797 | 119 | 495 | 56 | 127 |
+| Validation | 140 | 191 | 31 | 130 | 13 | 17 |
+| Test | 178 | 256 | 50 | 158 | 22 | 26 |
+| **Total** | **877** | **1,244** | **200** | **783** | **91** | **170** |
 
-**Usage rights:** The dataset is publicly accessible, but its **original license and redistribution permissions must be verified** at the Kaggle source. This repository does not redistribute the source photographs. Credit the original dataset publisher and PaddleDetection. Ultralytics software is subject to its own licensing terms (including AGPL-3.0 in its open-source distribution).
+Source of truth: [`dataset_counts.csv`](evidence/dataset_counts.csv),
+[`dataset_audit.json`](evidence/dataset_audit.json) and
+[`split_manifest.csv`](evidence/split_manifest.csv).
 
-## 3. Model and implementation
+![Six ground-truth examples](evidence/ground_truth_examples.png)
 
-- **Framework:** [Ultralytics](https://docs.ultralytics.com/) `8.3.220`, based on PyTorch.
-- **Detector:** `YOLO11n` (nano), initialized from `yolo11n.pt` pretrained detection weights for **both** experiments.
-- **Why YOLO11n:** a relatively lightweight detector that is practical for a modest dataset and limited Colab GPU time. No architecture is built from scratch.
-- **Input image size:** `512 × 512`.
-- **Batch size:** `16`.
-- **Epochs:** `14`.
-- **Optimizer:** SGD.
-- **Initial learning rate:** `0.01` (`lr0`).
-- **Weight decay:** `0.0005`.
-- **Random seed:** `42`; deterministic mode enabled.
-- **Additional augmentation settings:** fixed to the values recorded in the notebook and `controlled_experiment_config.json`; e.g., mosaic, horizontal/vertical flips, hue/saturation jitter, rotation and translation are disabled in both runs.
-- **Compute environment and total training time:** automatically recorded during actual execution; GPU/torch versions depend on the Colab runtime.
+**Leakage limitation:** original source-video IDs are unavailable. Perceptual
+grouping reduces near-duplicate leakage but cannot prove that different frames
+from the same source video remain in one split.
 
-The notebook pins its main Python dependencies. See [`requirements.txt`](requirements.txt) for the standalone list. CUDA-enabled PyTorch is provided by the selected Colab runtime.
+## 3. Model and execution environment
+
+| Setting | Value |
+| --- | --- |
+| Detector | YOLO11n |
+| Initial checkpoint | `yolo11n.pt` for both runs |
+| Image size | 512 × 512 |
+| Epochs | 14 |
+| Batch size | 16 |
+| Optimizer | SGD |
+| Initial learning rate | 0.01 |
+| Weight decay | 0.0005 |
+| Random seed | 42, deterministic mode |
+| Ultralytics | 8.3.220 |
+| Python | 3.11.6 |
+| Device used for the recorded run | Apple M3 CPU |
+
+Mosaic, mixup, geometry transforms, flips, hue jitter and saturation jitter were
+disabled in both runs. Full fixed settings are recorded in
+[`controlled_experiment_config.json`](evidence/controlled_experiment_config.json).
 
 ## 4. Controlled experiment
 
-**Hypothesis written before training:** moderate HSV brightness augmentation (`hsv_v=0.35`) may improve generalization across darker and brighter road scenes and increase **validation mAP@0.50**.
+The hypothesis was written before training: moderate brightness jitter may
+improve validation mAP@0.50 across brighter and darker scenes. Exactly one
+deliberate parameter changes:
 
-Both runs share the **same dataset split, initial pretrained weights, image size, optimizer, training duration, seed, learning rate, and other augmentation settings**. Exactly one deliberate hyperparameter changes:
+| Setting | Baseline | Brightness experiment |
+| --- | ---: | ---: |
+| Run | `baseline_no_brightness` | `experiment_brightness_035` |
+| `hsv_v` | **0.00** | **0.35** |
+| Precision | 0.9404 | 0.9198 |
+| Recall | 0.8548 | **0.8915** |
+| mAP@0.50 | 0.9098 | **0.9184** |
+| mAP@0.50:0.95 | 0.7559 | **0.7611** |
+| Training time | 51.48 min | **49.35 min** |
 
-| Setting | Run A — Baseline | Run B — Experiment |
-| --- | --- | --- |
-| Run directory | `baseline_no_brightness` | `experiment_brightness_035` |
-| Initial checkpoint | `yolo11n.pt` | `yolo11n.pt` |
-| `hsv_v` brightness jitter | **0.00** | **0.35** |
-| Image size | 512 | 512 |
-| Batch size | 16 | 16 |
-| Epochs | 14 | 14 |
-| Optimizer / LR | SGD / 0.01 | SGD / 0.01 |
-| Seed | 42 | 42 |
+The brightness run gained approximately **+0.0367 Recall** and **+0.0085
+mAP@0.50**, with approximately **−0.0206 Precision**. The experiment run was
+selected by the predefined rule: highest validation mAP@0.50, then validation
+Precision as a tie-breaker. The test set was not used for selection or tuning.
 
-Each run writes training logs, a learning-curve plot, configuration arguments, and its best checkpoint selected by validation results. Timing is measured separately for each run. The search is **controlled**; an improvement is not required to complete the experiment.
+Sources:
+[`validation_table.csv`](evidence/validation_table.csv),
+[`validation_comparison.json`](evidence/validation_comparison.json),
+[`training_times.json`](evidence/training_times.json) and
+[`model_selection.json`](evidence/model_selection.json).
 
-### Validation comparison (fill from the real run)
-
-| Run | Precision | Recall | mAP@0.50 | Training time (minutes) |
-| --- | ---: | ---: | ---: | ---: |
-| A — `hsv_v=0.00` | _Pending_ | _Pending_ | _Pending_ | _Pending_ |
-| B — `hsv_v=0.35` | _Pending_ | _Pending_ | _Pending_ | _Pending_ |
-
-Generated source of truth: `evidence/validation_table.csv`, `evidence/validation_comparison.json`, and `evidence/training_times.json`.
-
-### How the final model is selected
-
-Select the run with the **highest validation mAP@0.50**, breaking ties by validation Precision (then a deterministic baseline preference). Copy its validated `best.pt` to `weights/final_best.pt`. Do **not** use the final test results to select a model or to revise settings.
-
-## 5. Metrics and evaluation
-
-- **Precision:** proportion of predicted detections that are correct, given the detection matching criteria.
-- **Recall:** proportion of ground-truth objects successfully detected.
-- **IoU (Intersection over Union):** overlap area divided by union area for two bounding boxes.
-- **mAP@0.50:** mean Average Precision across the four classes, using IoU ≥ 0.50 to match predicted and ground-truth boxes.
-- **Training time:** wall-clock time, recorded separately for each complete training run.
-
-**Evaluation settings in the notebook:**
-
-| Setting | Value | Purpose |
-| --- | ---: | --- |
-| Validation/test evaluation confidence cutoff | `0.001` | Collect low-score detections for PR/AP computation |
-| NMS IoU threshold | `0.70` | Suppress overlapping duplicate predictions |
-| AP matching IoU | `0.50` | Define a correct match for mAP@0.50 |
-| Prediction-visualization confidence cutoff | `0.25` | Display readable predictions |
-| Prediction-visualization NMS IoU | `0.70` | Filter duplicate displayed boxes |
-
-The selected checkpoint is evaluated on the **locked test set once**. **These numbers must be copied from the executed notebook, not estimated:**
-
-| Final test metric | Result |
+| Baseline learning curves | Brightness-experiment learning curves |
 | --- | --- |
-| Selected run | _From `evidence/model_selection.json`_ |
-| Precision | _From `evidence/test_metrics.json`_ |
-| Recall | _From `evidence/test_metrics.json`_ |
-| mAP@0.50 | _From `evidence/test_metrics.json`_ |
-| Final checkpoint | [**ADD PUBLIC DOWNLOAD URL** after training and upload](#7-evidence-and-checkpoints) |
+| ![Baseline training results](evidence/baseline_no_brightness_results.png) | ![Brightness training results](evidence/experiment_brightness_035_results.png) |
 
-## 6. Prediction examples and failure analysis
+## 5. Locked test evaluation
 
-The notebook saves **eight test prediction examples**, each displaying bounding boxes, predicted labels, and confidence scores. A separate diagnostic analyzes ground-truth/prediction overlap and produces up to **three** representative failure cases (or challenging cases if fewer failures are found):
+After validation selection, `experiment_brightness_035/best.pt` was copied to
+`weights/final_best.pt` and evaluated on the locked test split once.
 
-1. **Missed sign / false negative:** a real annotated object is not successfully matched to any prediction.
-2. **False detection / false positive:** an extra predicted box is not matched to a ground-truth object.
-3. **Wrong class or inaccurate box:** the predicted class is wrong or its location does not sufficiently overlap the ground truth.
+| Metric | Result |
+| --- | ---: |
+| Precision | **0.9315** |
+| Recall | **0.8717** |
+| mAP@0.50 | **0.9183** |
+| mAP@0.50:0.95 | **0.7403** |
 
-Potential causes include small distant signs, low contrast, occlusion, or difficult lighting. **These are possible causes, not confirmed findings.** Review the actual saved test examples and update the explanations based on what is visible.
+Evaluation settings:
 
-Generated files include `evidence/test_predictions_8.png`, `evidence/prediction_*.png`, `evidence/failure_01.png`–`failure_03.png` when applicable, and `evidence/failure_analysis_candidates.json`. In failure images, **green boxes are ground truth** and **orange boxes are predictions**.
+- confidence cutoff: `0.001`;
+- NMS IoU: `0.70`;
+- AP matching IoU: `0.50`;
+- prediction-figure confidence: `0.25`.
 
-**Failure-review notes (complete after examining real images):**
+Source of truth: [`test_metrics.json`](evidence/test_metrics.json).
 
-| Case | Image | Actual failure or challenge | Likely cause | Suggested improvement |
+![Eight held-out test predictions](evidence/test_predictions_8.png)
+
+## 6. Manually reviewed failure cases
+
+Green boxes are ground truth and orange boxes are predictions. The three
+exported cases were manually inspected on November 21, 2026. Causes below are
+clearly separated from direct observations.
+
+| Case | Evidence | Direct observation | Cause hypothesis | Possible improvement |
 | --- | --- | --- | --- | --- |
-| 1 | _Pending_ | _Pending_ | _Pending_ | _Pending_ |
-| 2 | _Pending_ | _Pending_ | _Pending_ | _Pending_ |
-| 3 | _Pending_ | _Pending_ | _Pending_ | _Pending_ |
+| `road100.png` | [![road100 failure](evidence/failure_01.png)](evidence/failure_01.png) | The ground-truth object is a circular speed-limit 50 sign; the model predicts `stop` with 0.99 confidence over the same sign. | The model may rely too strongly on dominant sign appearance instead of internal digits; the image alone does not establish the cause. | Add more difficult speed-limit/stop negatives and inspect class-specific confusion. |
+| `road124.png` | [![road124 failure](evidence/failure_02.png)](evidence/failure_02.png) | The crosswalk is detected at 1.00, but all three annotated traffic-light objects are missed. The upper-right light is partly cropped; the two lower signals are small and dark. | Object scale, cropping and pedestrian-signal appearance may contribute. | Add more varied traffic-light examples and evaluate higher-resolution/small-object training. |
+| `road319.png` | [![road319 failure](evidence/failure_03.png)](evidence/failure_03.png) | The speed-limit sign and traffic light are detected. The very small crosswalk is not matched; an overlapping 0.33-confidence box is labeled `speedlimit`. | The distant sign's small scale may increase localization and class ambiguity. | Add small/distant crosswalk examples or test a larger input size in a new controlled study. |
 
-## 7. Reproduce in Google Colab
+Machine-generated matching details and the manual-review fields are preserved in
+[`failure_analysis_candidates.json`](evidence/failure_analysis_candidates.json).
 
-### Open the notebook
+## 7. Checkpoint and inference
 
-**Notebook:** [`CSCI1409_Bonus_Traffic_Signs_Colab.ipynb`](CSCI1409_Bonus_Traffic_Signs_Colab.ipynb)
+The real selected checkpoint is committed because its size is only 5.44 MB,
+well below GitHub's per-file limit.
 
-**Colab link:**
-
-<https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb>
-
-1. Upload the notebook to [Google Colab](https://colab.research.google.com/) or open it from GitHub.
-2. Select **Runtime → Change runtime type → T4 GPU** if available.
-3. Choose **Runtime → Run all**. The notebook downloads the dataset and pretrained weights, audits and converts annotations, creates the split, trains both runs, evaluates and exports evidence.
-4. Save the executed notebook **with cell outputs**.
-5. Download the generated `TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip` (the notebook offers the download in Colab).
-6. Extract the ZIP and add **selected evidence files** to this repository. Upload the final checkpoint to accessible external storage if it exceeds GitHub's limits. Add its verified download link below.
-7. Regenerate your 5-slide defense presentation using the saved evidence:
-
-```bash
-python -m pip install -r requirements.txt
-python scripts/build_defense.py --artifacts TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip
-```
-
-A Russian-language walk-through is in [`HOW_TO_RUN_RU.md`](HOW_TO_RUN_RU.md).
-
-### Final checkpoint download
-
-**Trained checkpoint (`final_best.pt`):** **[INSERT WORKING PUBLIC LINK AFTER TRAINING]**
-
-To run inference after downloading `final_best.pt`:
+- **Repository file:** [`weights/final_best.pt`](weights/final_best.pt)
+- **Direct download:** [final_best.pt](https://raw.githubusercontent.com/ravonek/Traffic-Sign-Detection/main/weights/final_best.pt)
+- **SHA-256:** `7d3a5c1bec29855be12fd5c065e26ae983fb44af5dd2bc1063e8887146381d1d`
+- **Verified identity:** byte-for-byte equal to
+  `experiment_brightness_035_best.pt` from the artifact bundle.
 
 ```python
 from ultralytics import YOLO
 
-model = YOLO("final_best.pt")
+model = YOLO("weights/final_best.pt")
 results = model.predict(
-    source="path/to/test_image.jpg",
+    source="path/to/image_or_video.mp4",
     imgsz=512,
     conf=0.25,
     iou=0.70,
@@ -200,68 +193,90 @@ results = model.predict(
 )
 ```
 
-Upload only checkpoints actually produced by the completed run, and confirm that the instructor can open the link without signing into your account.
+## 8. Video demonstration
 
-## 8. Evidence and checkpoints
+The repository includes the same 15-second, 1280×720, 30 fps road sequence
+before and after inference:
 
-After successful execution, the evidence bundle is expected to contain:
-
-| Artifact | Purpose |
+| Original scene | YOLO11n detections |
 | --- | --- |
-| `evidence/dataset_counts.csv` | Class and object counts per split |
-| `evidence/dataset_audit.json` and `split_manifest.csv` | Annotation checks and split reproducibility |
-| `evidence/ground_truth_examples.png` | At least five real images with correct boxes |
-| `evidence/controlled_experiment_config.json` | Fixed settings and the single changed parameter |
-| `evidence/baseline_no_brightness_results.csv/png` | Baseline learning curves and history |
-| `evidence/experiment_brightness_035_results.csv/png` | Experiment learning curves and history |
-| `evidence/validation_table.csv` | Both-run validation metrics and times |
-| `evidence/model_selection.json` | Final-run selection from validation |
-| `evidence/test_metrics.json` | Independent final test evaluation |
-| `evidence/test_predictions_8.png` | Test images with predictions and confidences |
-| `evidence/failure_analysis_candidates.json` and `failure_*.png` | Three error/challenging examples for manual review |
-| `evidence/results_summary.json` | Consolidated experiment settings and results |
-| `weights/final_best.pt` | Selected final detector checkpoint |
+| [`road_drive_15s_raw.mp4`](demo/road_drive_15s_raw.mp4) | [`road_drive_15s_yolo11n_predicted.mp4`](demo/road_drive_15s_yolo11n_predicted.mp4) |
 
-The generated ZIP also includes run-specific training data in `runs/`, and best checkpoints for both runs in `weights/`. Large binaries need not be committed into Git; share a direct, accessible weight-download link instead.
+These videos are qualitative evidence only and do not replace the held-out test
+metrics.
 
-## 9. Repository structure
+## 9. Reproduce the experiment
+
+### Google Colab
+
+1. Open the [executed notebook in Colab](https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb).
+2. To reproduce from scratch, choose **Runtime → Restart session**, select a GPU
+   if available, and run all cells in order.
+3. The notebook downloads the public VOC archive, audits and converts labels,
+   creates the seeded grouped split, trains both runs, selects on validation,
+   evaluates the locked test set and exports
+   `TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip`.
+
+### Local environment
+
+```bash
+git clone https://github.com/ravonek/Traffic-Sign-Detection.git
+cd Traffic-Sign-Detection
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+jupyter notebook CSCI1409_Bonus_Traffic_Signs_Colab.ipynb
+```
+
+The source code selects `/content/traffic_sign_bonus` in Colab and a project-local
+`traffic_sign_bonus` directory elsewhere; no machine-specific absolute path is
+required for a new run. See [`HOW_TO_RUN_RU.md`](HOW_TO_RUN_RU.md) for details.
+
+To rebuild the presentation from an exported artifact bundle:
+
+```bash
+python scripts/build_defense.py --artifacts TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip
+```
+
+## 10. Repository structure
 
 ```text
 Traffic-Sign-Detection/
 ├── README.md
 ├── requirements.txt
-├── .gitignore
-├── CSCI1409_Bonus_Traffic_Signs_Colab.ipynb
-├── CSCI1409_Bonus_Traffic_Signs_Defense_3min.pptx
+├── CSCI1409_Bonus_Traffic_Signs_Colab.ipynb       # executed, 10/10 code cells
+├── CSCI1409_Bonus_Traffic_Signs_Defense_3min.pptx # measured results
 ├── CSCI1409_Bonus_Traffic_Signs_Speech_EN.md
-├── HOW_TO_RUN_RU.md
 ├── DEFENSE_QA_RU_EN.md
+├── HOW_TO_RUN_RU.md
 ├── PROJECT_STATUS.txt
+├── demo/
+│   ├── road_drive_15s_raw.mp4
+│   └── road_drive_15s_yolo11n_predicted.mp4
+├── evidence/                                      # genuine exported evidence
 ├── scripts/
 │   └── build_defense.py
-├── evidence/
-│   ├── README.txt                 # replace with real evidence after training
-│   └── ...                        # generated files described above
-└── weights/                       # generated after training; link externally
-    └── final_best.pt
+└── weights/
+    └── final_best.pt                              # selected checkpoint
 ```
 
-### Final GitHub submission checklist
+## Limitations and integrity
 
-1. Keep `README.md` and the notebook at the root of this repository.
-2. Run the full notebook, save output evidence, add your real values to the tables, and upload the selected checkpoint to accessible storage.
-3. Regenerate the presentation from the completed artifact ZIP.
-4. Check the notebook and checkpoint links from a logged-out browser session.
-5. Send the repository URL to the instructor through Teams with **your full name and student ID**, and defend the work on **November 21, 2026**.
+- The dataset is small and class-imbalanced.
+- Only one training run was executed per condition, so run-to-run variance is
+  not measured.
+- Source-video IDs are unavailable.
+- Domain shift, small objects, occlusion and unusual signal types remain
+  challenging.
+- This educational detector is not validated for safety-critical deployment.
+- AI assistance was used for implementation structure, documentation and
+  presentation drafting. The student executed the experiments, preserved the
+  outputs and is responsible for explaining and verifying the work.
 
-## 10. Presentation and academic integrity
-
-A **three-minute, five-slide presentation** is included. It covers the dataset and preparation, solution, model, controlled experiment, and evaluation/results. Final slides should present **actual measured results**, not placeholders.
-
-**Limitations:** small dataset; possible distribution differences from real road environments; small/distant objects; lighting and occlusion; absence of source-video IDs; no claims of safety-critical deployment suitability. A single controlled run per condition gives limited evidence for a general conclusion.
-
-**Credits and assistance disclosure:** The detector uses Ultralytics' pretrained YOLO11n implementation rather than a novel architecture. Data and annotations come from the sources credited above. AI assistance was used to structure and draft the implementation, documentation, and presentation; the student is responsible for verifying code, executing experiments, inspecting errors, and explaining results during the individual defense.
+The dataset photographs are not redistributed in this repository. Dataset and
+PaddleDetection sources are credited above. Ultralytics' open-source software is
+subject to its own licensing terms.
 
 ---
 
-**Course:** CSCI1409 Deep Learning — Bonus Project · **Deadline/defense:** Saturday, **November 21, 2026** · **Maximum:** 3 bonus points.
+**Course:** CSCI1409 Deep Learning · **Defense:** November 21, 2026 · **Maximum:** 3 bonus points

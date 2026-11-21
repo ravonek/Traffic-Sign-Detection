@@ -1,62 +1,110 @@
-# Как запустить проект в Google Colab
+# Как воспроизвести проект
 
-## Быстрый запуск
+Репозиторий уже содержит завершённый запуск: executed notebook, метрики,
+визуальные evidence-файлы и выбранный `weights/final_best.pt`. Повторное обучение
+для просмотра результатов не требуется.
 
-1. Откройте [ноутбук в Google Colab](https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb).
-2. В Colab выберите **Runtime → Change runtime type → T4 GPU**.
-3. Проверьте, что в правом верхнем углу указан GPU, затем выберите **Runtime → Run all**.
-4. Не закрывайте вкладку до завершения обеих тренировок и финального экспорта.
-5. Скачайте предложенный файл `TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip`.
+## Быстро посмотреть результаты
 
-Ноутбук сам скачивает датасет, проверяет VOC-разметку, строит train/validation/test split, обучает два YOLO11n и оценивает выбранную модель. Kaggle API-ключ не требуется.
+1. Откройте [`CSCI1409_Bonus_Traffic_Signs_Colab.ipynb`](CSCI1409_Bonus_Traffic_Signs_Colab.ipynb).
+2. В ноутбуке сохранены outputs всех 10 code cells, включая training logs,
+   validation comparison и locked-test metrics.
+3. Итоговые источники данных находятся в:
+   - `evidence/validation_table.csv`;
+   - `evidence/model_selection.json`;
+   - `evidence/test_metrics.json`;
+   - `evidence/results_summary.json`.
+4. Качественные примеры находятся в `evidence/test_predictions_8.png`,
+   `evidence/failure_01.png`–`failure_03.png` и `demo/`.
 
-## Что должно завершиться
+## Запустить inference с готовым checkpoint
 
-Успешный полный запуск заканчивается строками с путём к ZIP, выбранным run и реальными test Precision/Recall/mAP50. Установка зависимостей или появление папки `runs/` ещё не означает, что эксперимент завершён.
+```bash
+git clone https://github.com/ravonek/Traffic-Sign-Detection.git
+cd Traffic-Sign-Detection
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
 
-В ZIP должны быть как минимум:
+Пример Python:
 
-- `evidence/dataset_counts.csv`;
-- `evidence/validation_table.csv`;
-- `evidence/model_selection.json`;
-- `evidence/test_metrics.json`;
-- `evidence/test_predictions_8.png`;
-- `evidence/failure_analysis_candidates.json`;
-- `weights/final_best.pt`.
+```python
+from ultralytics import YOLO
 
-Если одного из этих файлов нет, найдите первую ячейку с ошибкой и запустите её повторно после исправления. Не заполняйте метрики вручную по памяти.
+model = YOLO("weights/final_best.pt")
+model.predict(
+    source="path/to/image_or_video.mp4",
+    imgsz=512,
+    conf=0.25,
+    iou=0.70,
+    save=True,
+)
+```
 
-## После обучения
+SHA-256 checkpoint:
 
-1. Сохраните копию ноутбука **с outputs** через **File → Save a copy in GitHub** или скачайте `.ipynb` и замените файл в репозитории.
-2. Распакуйте ZIP локально.
-3. Скопируйте небольшие файлы из `evidence/` в одноимённую папку репозитория.
-4. Сгенерируйте обновлённую презентацию:
+```text
+7d3a5c1bec29855be12fd5c065e26ae983fb44af5dd2bc1063e8887146381d1d
+```
 
-   ```bash
-   python -m pip install -r requirements.txt
-   python scripts/build_defense.py --artifacts TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip
-   ```
+## Полностью повторить эксперимент в Google Colab
 
-5. Загрузите `weights/final_best.pt` в Google Drive или другое хранилище с публичным доступом по ссылке. Не добавляйте большой checkpoint в обычный Git-коммит.
-6. Вставьте фактические числа и публичную ссылку на checkpoint в `README.md`.
-7. Откройте ссылки на ноутбук и checkpoint в приватном окне браузера.
+1. Откройте [ноутбук в Colab](https://colab.research.google.com/github/ravonek/Traffic-Sign-Detection/blob/main/CSCI1409_Bonus_Traffic_Signs_Colab.ipynb).
+2. Чтобы не смешивать новый запуск с сохранёнными outputs, выберите
+   **Runtime → Restart session**.
+3. При наличии выберите **Runtime → Change runtime type → T4 GPU**. Зафиксированный
+   в репозитории запуск был выполнен на Apple M3 CPU, поэтому численные результаты
+   и время нового запуска могут немного отличаться.
+4. Выполните **Runtime → Run all**.
 
-## Типичные проблемы
+Ноутбук автоматически:
 
-### Colab показывает CPU
+- устанавливает зафиксированные основные зависимости;
+- скачивает PASCAL VOC archive без Kaggle API key;
+- проверяет XML-разметку и bounding boxes;
+- создаёт seeded grouped split;
+- обучает baseline и brightness run из одного `yolo11n.pt`;
+- выбирает модель только по validation;
+- один раз оценивает locked test;
+- экспортирует `TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip`.
 
-Смените тип среды выполнения на T4 GPU и перезапустите среду. На CPU две тренировки займут существенно больше времени.
+Полный запуск считается завершённым только после последней ячейки и появления
+ZIP. Установка зависимостей или один каталог `runs/` не являются завершённым
+экспериментом.
 
-### Закончилась память GPU
+## Пересобрать презентацию
 
-Перезапустите runtime и повторите полный запуск. Если проблема повторяется, уменьшение `batch` меняет конфигурацию эксперимента — отразите это честно в README и в защите.
+Из ZIP:
 
-### Сессия Colab отключилась
+```bash
+python scripts/build_defense.py \
+  --artifacts TRAFFIC_SIGN_SUBMISSION_ARTIFACTS.zip
+```
 
-Стандартная среда Colab временная. Если training run не закончен и его `best.pt` не попал в скачанный ZIP, этот run считается незавершённым и должен быть выполнен снова.
+Или из распакованного каталога, содержащего `evidence/`:
 
-### Результаты двух запусков уже существуют
+```bash
+python scripts/build_defense.py --artifacts path/to/artifacts
+```
 
-Ноутбук настроен на воспроизводимый запуск, но перед финальной сдачей лучше начать с новой среды Colab. Так оба run гарантированно стартуют из одного `yolo11n.pt` и не смешиваются со старыми файлами.
+Генератор берёт только реальные CSV/JSON и изображения. Если метрики отсутствуют,
+он создаёт явно помеченную pre-run версию и не подставляет вымышленные числа.
 
+## Важные различия порогов
+
+- validation/test evaluation confidence: `0.001`;
+- NMS IoU: `0.70`;
+- AP matching IoU: `0.50`;
+- prediction visualization confidence: `0.25`.
+
+Порог визуализации выше, чтобы изображения оставались читаемыми; он не заменяет
+порог, используемый при расчёте AP.
+
+## Если полный повторный запуск прервался
+
+- Проверьте первую ячейку с ошибкой.
+- Не объединяйте checkpoints от разных незавершённых запусков.
+- Не редактируйте метрики вручную: берите их из экспортированных JSON/CSV.
+- Изменение batch size или других параметров означает новую конфигурацию и должно
+  быть отдельно задокументировано.

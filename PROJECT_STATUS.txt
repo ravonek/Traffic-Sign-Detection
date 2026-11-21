@@ -1,22 +1,32 @@
-PROJECT STATUS — NOT YET TRAINED
-Updated: 2026-11-20 (Asia/Almaty)
+PROJECT STATUS — COMPLETED
+Updated: 2026-11-21 (Asia/Almaty)
 
-READY
-- Reproducible Colab notebook
-- Dataset audit and grouped split logic
-- Two-run controlled experiment (hsv_v 0.00 vs 0.35)
-- Validation-based model selection and locked test evaluation
-- Prediction and failure-analysis export
-- README, run guide, defense Q&A and presentation builder
+EXECUTION
+- Executed notebook preserved with outputs from all 10 code cells
+- Two controlled YOLO11n runs completed on Apple M3 CPU
+- Baseline hsv_v=0.00: validation mAP@0.50 = 0.9098
+- Experiment hsv_v=0.35: validation mAP@0.50 = 0.9184
+- Selected run: experiment_brightness_035
+- Locked test evaluated once: Precision 0.9315, Recall 0.8717,
+  mAP@0.50 0.9183, mAP@0.50:0.95 0.7403
 
-PENDING — MUST BE COMPLETED BEFORE SUBMISSION
-- Run every Colab cell on a GPU through the final ZIP export
-- Save the executed notebook with cell outputs
-- Add generated evidence files and observed metrics
-- Review the exported failure images and write evidence-based explanations
-- Publish final_best.pt at a working public URL
-- Regenerate the presentation from the real artifact ZIP
-- Replace all README/presentation/speech placeholders
+PUBLISHED ARTIFACTS
+- Genuine dataset audit, split manifest, metrics, plots and prediction images
+- Manually reviewed failure_01.png through failure_03.png
+- Selected 5.44 MB final_best.pt with SHA-256:
+  7d3a5c1bec29855be12fd5c065e26ae983fb44af5dd2bc1063e8887146381d1d
+- Five-slide presentation regenerated from measured artifacts
+- Original and predicted 15-second demonstration videos
 
-No trained checkpoint or measured metric is claimed in the current repository.
+REPRODUCIBILITY
+- Public dataset download and preparation remain in the notebook
+- Fixed seed, split method, model settings and dependency versions documented
+- No local absolute path is required for a new run
+- The committed checkpoint equals experiment_brightness_035_best.pt byte-for-byte
+
+KNOWN LIMITATIONS
+- One run per condition; run-to-run variance was not measured
+- Source-video IDs are unavailable
+- Small/distant objects and unusual signal heads remain challenging
+- The project is educational and not validated for safety-critical deployment
 

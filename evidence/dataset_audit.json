@@ -1,0 +1,41 @@
+{
+  "source": "https://paddlemodels.bj.bcebos.com/object_detection/roadsign_voc.tar",
+  "source_license": "Check the original Kaggle source terms",
+  "seed": 42,
+  "split_method": "Source held-out subset + seeded grouped train/val, phash<=4",
+  "provider_test_images": 176,
+  "perceptual_groups": 874,
+  "image_count": 877,
+  "object_count": 1244,
+  "group_check": "No exact/perceptual near-duplicate group crosses splits",
+  "video_id_warning": "Source video IDs unavailable; video-level grouping unverified",
+  "counts": [
+    {
+      "split": "train",
+      "images": 559,
+      "objects": 797,
+      "crosswalk": 119,
+      "speedlimit": 495,
+      "stop": 56,
+      "trafficlight": 127
+    },
+    {
+      "split": "val",
+      "images": 140,
+      "objects": 191,
+      "crosswalk": 31,
+      "speedlimit": 130,
+      "stop": 13,
+      "trafficlight": 17
+    },
+    {
+      "split": "test",
+      "images": 178,
+      "objects": 256,
+      "crosswalk": 50,
+      "speedlimit": 158,
+      "stop": 22,
+      "trafficlight": 26
+    }
+  ]
+}

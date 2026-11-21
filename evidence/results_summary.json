@@ -1,0 +1,141 @@
+{
+  "source": "https://paddlemodels.bj.bcebos.com/object_detection/roadsign_voc.tar",
+  "source_kaggle": "https://www.kaggle.com/datasets/andrewmvd/road-sign-detection",
+  "classes": [
+    "crosswalk",
+    "speedlimit",
+    "stop",
+    "trafficlight"
+  ],
+  "data": [
+    {
+      "split": "train",
+      "images": 559,
+      "objects": 797,
+      "crosswalk": 119,
+      "speedlimit": 495,
+      "stop": 56,
+      "trafficlight": 127
+    },
+    {
+      "split": "val",
+      "images": 140,
+      "objects": 191,
+      "crosswalk": 31,
+      "speedlimit": 130,
+      "stop": 13,
+      "trafficlight": 17
+    },
+    {
+      "split": "test",
+      "images": 178,
+      "objects": 256,
+      "crosswalk": 50,
+      "speedlimit": 158,
+      "stop": 22,
+      "trafficlight": 26
+    }
+  ],
+  "split_seed": 42,
+  "split_method": "VOC provider holdout and near-duplicate groups",
+  "environment": {
+    "python": "3.11.6",
+    "ultralytics": "8.3.220",
+    "torch": "2.14.1",
+    "gpu": "CPU",
+    "seed": 42,
+    "device": "cpu"
+  },
+  "fixed_configuration": {
+    "model": "yolo11n.pt",
+    "imgsz": 512,
+    "epochs": 14,
+    "batch": 16,
+    "lr0": 0.01,
+    "optimizer": "SGD",
+    "seed": 42,
+    "deterministic": true,
+    "patience": 100,
+    "workers": 2,
+    "mosaic": 0.0,
+    "mixup": 0.0,
+    "degrees": 0.0,
+    "translate": 0.0,
+    "scale": 0.0,
+    "shear": 0.0,
+    "perspective": 0.0,
+    "flipud": 0.0,
+    "fliplr": 0.0,
+    "hsv_h": 0.0,
+    "hsv_s": 0.0,
+    "close_mosaic": 0,
+    "weight_decay": 0.0005,
+    "cos_lr": false
+  },
+  "experiment": "hsv_v: 0.0 vs 0.35",
+  "hypothesis": "Brightness jitter may increase validation mAP50",
+  "train_times_sec": {
+    "baseline_no_brightness": 3088.79,
+    "experiment_brightness_035": 2960.72
+  },
+  "validation": {
+    "baseline_no_brightness": {
+      "precision": 0.940432600336392,
+      "recall": 0.8547971553432056,
+      "mAP50": 0.9098210032143317,
+      "mAP50_95": 0.7559227803426959,
+      "eval_conf": 0.001,
+      "nms_iou": 0.7,
+      "ap_match_iou": 0.5,
+      "split": "val"
+    },
+    "experiment_brightness_035": {
+      "precision": 0.919815548289462,
+      "recall": 0.8914766660211408,
+      "mAP50": 0.918362032966606,
+      "mAP50_95": 0.7610513091035175,
+      "eval_conf": 0.001,
+      "nms_iou": 0.7,
+      "ap_match_iou": 0.5,
+      "split": "val"
+    }
+  },
+  "selection": {
+    "selected_run": "experiment_brightness_035",
+    "criterion": "highest validation mAP50 (precision tie-break)",
+    "selected_validation_metrics": {
+      "precision": 0.919815548289462,
+      "recall": 0.8914766660211408,
+      "mAP50": 0.918362032966606,
+      "mAP50_95": 0.7610513091035175,
+      "eval_conf": 0.001,
+      "nms_iou": 0.7,
+      "ap_match_iou": 0.5,
+      "split": "val"
+    },
+    "checkpoint_sha256": "7d3a5c1bec29855be12fd5c065e26ae983fb44af5dd2bc1063e8887146381d1d"
+  },
+  "test": {
+    "selected_run": "experiment_brightness_035",
+    "metrics": {
+      "precision": 0.931485949167858,
+      "recall": 0.8716690271753563,
+      "mAP50": 0.9183445180703351,
+      "mAP50_95": 0.7402944562875066,
+      "eval_conf": 0.001,
+      "nms_iou": 0.7,
+      "ap_match_iou": 0.5,
+      "split": "test"
+    }
+  },
+  "evaluation_thresholds": {
+    "conf": 0.001,
+    "NMS_IoU": 0.7,
+    "AP_IoU": 0.5
+  },
+  "prediction_thresholds": {
+    "conf": 0.25,
+    "NMS_IoU": 0.7
+  },
+  "caveat": "No original video IDs; visually inspect near-duplicate image grouping"
+}

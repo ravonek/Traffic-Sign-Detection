@@ -1,0 +1,22 @@
+{
+  "baseline_no_brightness": {
+    "precision": 0.940432600336392,
+    "recall": 0.8547971553432056,
+    "mAP50": 0.9098210032143317,
+    "mAP50_95": 0.7559227803426959,
+    "eval_conf": 0.001,
+    "nms_iou": 0.7,
+    "ap_match_iou": 0.5,
+    "split": "val"
+  },
+  "experiment_brightness_035": {
+    "precision": 0.919815548289462,
+    "recall": 0.8914766660211408,
+    "mAP50": 0.918362032966606,
+    "mAP50_95": 0.7610513091035175,
+    "eval_conf": 0.001,
+    "nms_iou": 0.7,
+    "ap_match_iou": 0.5,
+    "split": "val"
+  }
+}
